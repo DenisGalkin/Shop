@@ -1,0 +1,11 @@
+services:
+  bot:
+    build: .
+    container_name: shop-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    volumes:
+      - ./data:/app/data
