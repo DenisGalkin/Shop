@@ -6,6 +6,10 @@ from typing import Any
 
 from aiohttp import web
 
+from bot.config import Config
+from bot.storage.repository import ShopRepository
+
+from .admin_web import setup_admin_routes
 from .payments import CryptoBotPaymentService
 
 
@@ -49,10 +53,13 @@ async def cryptobot_success(request: web.Request) -> web.Response:
     return web.Response(text=html_text, content_type="text/html")
 
 
-def create_payment_app(service: CryptoBotPaymentService) -> web.Application:
+def create_payment_app(service: CryptoBotPaymentService, repo: ShopRepository, config: Config) -> web.Application:
     app = web.Application()
     app["payment_service"] = service
+    app["repo"] = repo
+    app["config"] = config
     webhook_path = f"/payments/cryptobot/webhook/{service.config.cryptopay_webhook_path_token}"
     app.router.add_post(webhook_path, cryptobot_webhook)
     app.router.add_get("/payments/cryptobot/success", cryptobot_success)
+    setup_admin_routes(app)
     return app

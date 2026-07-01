@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 from hashlib import sha256
 from dataclasses import dataclass
@@ -30,10 +31,18 @@ class Config:
     cryptopay_webhook_path_token: str
     cryptopay_webhook_max_age_seconds: int
     cryptopay_sync_interval_seconds: int
+    admin_web_username: str
+    admin_web_password: str
+    admin_web_secret: str
+    admin_web_session_ttl_hours: int
 
     @property
     def cryptopay_enabled(self) -> bool:
         return bool(self.cryptopay_api_token)
+
+    @property
+    def admin_web_enabled(self) -> bool:
+        return bool(self.admin_web_username and self.admin_web_password)
 
 
 def _parse_admin_ids(raw_value: str) -> set[int]:
@@ -64,6 +73,9 @@ def load_config() -> Config:
     webhook_token = os.getenv("CRYPTOPAY_WEBHOOK_PATH_TOKEN", "").strip()
     if cryptopay_api_token and not webhook_token:
         webhook_token = sha256(cryptopay_api_token.encode("utf-8")).hexdigest()
+    admin_web_secret = os.getenv("ADMIN_WEB_SECRET", "").strip()
+    if not admin_web_secret:
+        admin_web_secret = base64.urlsafe_b64encode(sha256(bot_token.encode("utf-8")).digest()).decode("ascii")
 
     return Config(
         bot_token=bot_token,
@@ -86,4 +98,8 @@ def load_config() -> Config:
         cryptopay_webhook_path_token=webhook_token,
         cryptopay_webhook_max_age_seconds=int(os.getenv("CRYPTOPAY_WEBHOOK_MAX_AGE_SECONDS", "900")),
         cryptopay_sync_interval_seconds=int(os.getenv("CRYPTOPAY_SYNC_INTERVAL_SECONDS", "60")),
+        admin_web_username=os.getenv("ADMIN_WEB_USERNAME", "admin").strip(),
+        admin_web_password=os.getenv("ADMIN_WEB_PASSWORD", "").strip(),
+        admin_web_secret=admin_web_secret,
+        admin_web_session_ttl_hours=int(os.getenv("ADMIN_WEB_SESSION_TTL_HOURS", "24")),
     )

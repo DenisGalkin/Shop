@@ -459,6 +459,33 @@ class ShopRepository:
         )
         return {**dict(user), "referrals_count": referrals["count"], "purchases_count": purchases["count"]}
 
+    async def list_admin_users(self, search: str = "", limit: int = 50) -> list[dict[str, Any]]:
+        normalized = search.strip()
+        params: list[Any] = []
+        query = """
+            SELECT u.*,
+                   COALESCE(stats.orders_count, 0) AS orders_count
+            FROM users u
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS orders_count
+                FROM orders
+                WHERE status = 'completed'
+                GROUP BY user_id
+            ) stats ON stats.user_id = u.id
+        """
+        if normalized:
+            pattern = f"%{normalized.lower()}%"
+            query += """
+                WHERE CAST(u.tg_id AS TEXT) LIKE ?
+                   OR LOWER(COALESCE(u.username, '')) LIKE ?
+                   OR LOWER(u.full_name) LIKE ?
+            """
+            params.extend([pattern, pattern, pattern])
+        query += " ORDER BY u.id DESC LIMIT ?"
+        params.append(limit)
+        rows = await self._fetchall(query, params)
+        return [dict(row) for row in rows]
+
     async def release_expired_reservations(self) -> int:
         cursor = await self.db.execute(
             """
@@ -489,6 +516,22 @@ class ShopRepository:
         rows = await self._fetchall(query)
         return [dict(row) for row in rows]
 
+    async def list_admin_categories(self) -> list[dict[str, Any]]:
+        rows = await self._fetchall(
+            """
+            SELECT c.*,
+                   COUNT(DISTINCT p.id) AS products_count,
+                   COALESCE(SUM(CASE WHEN p.is_active = 1 THEN 1 ELSE 0 END), 0) AS active_products_count,
+                   COALESCE(SUM(CASE WHEN s.status = 'available' THEN 1 ELSE 0 END), 0) AS stock_total
+            FROM categories c
+            LEFT JOIN products p ON p.category_id = c.id
+            LEFT JOIN stock_items s ON s.product_id = p.id
+            GROUP BY c.id
+            ORDER BY c.sort_order ASC, c.id ASC
+            """
+        )
+        return [dict(row) for row in rows]
+
     async def get_category(self, category_id: int) -> dict[str, Any] | None:
         row = await self._fetchone("SELECT * FROM categories WHERE id = ?", (category_id,))
         return dict(row) if row else None
@@ -501,6 +544,17 @@ class ShopRepository:
         )
         await self.db.commit()
         return cursor.lastrowid
+
+    async def update_category(self, category_id: int, title: str, description: str, sort_order: int) -> None:
+        await self.db.execute(
+            """
+            UPDATE categories
+            SET title = ?, description = ?, sort_order = ?
+            WHERE id = ?
+            """,
+            (title, description, sort_order, category_id),
+        )
+        await self.db.commit()
 
     async def toggle_category(self, category_id: int) -> None:
         await self.db.execute(
@@ -532,6 +586,42 @@ class ShopRepository:
         if only_active:
             query += " AND p.is_active = 1"
         query += " ORDER BY p.sort_order ASC, p.id ASC"
+        rows = await self._fetchall(query, params)
+        return [dict(row) for row in rows]
+
+    async def list_admin_products(self, search: str = "", category_id: int | None = None) -> list[dict[str, Any]]:
+        await self.release_expired_reservations()
+        normalized = search.strip()
+        query = """
+            SELECT p.*, c.title AS category_title, c.slug AS category_slug,
+                   COALESCE(stock.available_count, 0) AS stock_count,
+                   COALESCE(stock.sold_count, 0) AS sold_count
+            FROM products p
+            JOIN categories c ON c.id = p.category_id
+            LEFT JOIN (
+                SELECT product_id,
+                       SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available_count,
+                       SUM(CASE WHEN status = 'sold' THEN 1 ELSE 0 END) AS sold_count
+                FROM stock_items
+                GROUP BY product_id
+            ) stock ON stock.product_id = p.id
+            WHERE 1 = 1
+        """
+        params: list[Any] = []
+        if category_id is not None:
+            query += " AND p.category_id = ?"
+            params.append(category_id)
+        if normalized:
+            pattern = f"%{normalized.lower()}%"
+            query += """
+                AND (
+                    LOWER(p.title) LIKE ?
+                    OR LOWER(p.internal_name) LIKE ?
+                    OR LOWER(c.title) LIKE ?
+                )
+            """
+            params.extend([pattern, pattern, pattern])
+        query += " ORDER BY c.sort_order ASC, p.sort_order ASC, p.id ASC"
         rows = await self._fetchall(query, params)
         return [dict(row) for row in rows]
 
@@ -592,6 +682,46 @@ class ShopRepository:
         if field_name not in allowed_fields:
             raise ValueError(f"Unsupported field: {field_name}")
         await self.db.execute(f"UPDATE products SET {field_name} = ? WHERE id = ?", (value, product_id))
+        await self.db.commit()
+
+    async def update_product(
+        self,
+        product_id: int,
+        *,
+        category_id: int,
+        title: str,
+        internal_name: str,
+        description: str,
+        important_info: str,
+        price_cents: int,
+        warranty_label: str,
+        sort_order: int,
+    ) -> None:
+        await self.db.execute(
+            """
+            UPDATE products
+            SET category_id = ?,
+                title = ?,
+                internal_name = ?,
+                description = ?,
+                important_info = ?,
+                price_cents = ?,
+                warranty_label = ?,
+                sort_order = ?
+            WHERE id = ?
+            """,
+            (
+                category_id,
+                title,
+                internal_name,
+                description,
+                important_info,
+                price_cents,
+                warranty_label,
+                sort_order,
+                product_id,
+            ),
+        )
         await self.db.commit()
 
     async def toggle_product(self, product_id: int) -> None:
@@ -1252,6 +1382,36 @@ class ShopRepository:
             LIMIT ?
             """,
             (limit,),
+        )
+        return [dict(row) for row in rows]
+
+    async def get_recent_payments(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = await self._fetchall(
+            """
+            SELECT p.*, u.tg_id AS buyer_tg_id, u.full_name AS buyer_name, pr.title AS product_title
+            FROM payments p
+            JOIN users u ON u.id = p.user_id
+            LEFT JOIN products pr ON pr.id = p.product_id
+            ORDER BY p.id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in rows]
+
+    async def get_dashboard_timeseries(self, days: int = 7) -> list[dict[str, Any]]:
+        rows = await self._fetchall(
+            """
+            SELECT substr(created_at, 1, 10) AS day,
+                   COUNT(*) AS orders_count,
+                   COALESCE(SUM(amount_cents), 0) AS revenue_cents
+            FROM orders
+            WHERE status = 'completed'
+              AND substr(created_at, 1, 10) >= substr(?, 1, 10)
+            GROUP BY substr(created_at, 1, 10)
+            ORDER BY day ASC
+            """,
+            ((utcnow() - timedelta(days=max(days - 1, 0))).isoformat(),),
         )
         return [dict(row) for row in rows]
 

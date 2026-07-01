@@ -6,4 +6,3 @@ __pycache__/
 *.pyd
 .Python
 data/
-image.png

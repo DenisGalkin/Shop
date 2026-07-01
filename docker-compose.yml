@@ -5,7 +5,46 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    expose:
+      - "${APP_PORT:-8080}"
     volumes:
       - ./data:/app/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import os, urllib.request;
+          urllib.request.urlopen(f'http://127.0.0.1:{os.getenv(\"APP_PORT\", \"8080\")}/admin', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - shop-network
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: shop-caddy
+    restart: unless-stopped
+    depends_on:
+      bot:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - shop-network
+
+networks:
+  shop-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

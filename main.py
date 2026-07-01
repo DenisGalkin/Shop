@@ -44,7 +44,7 @@ async def main() -> None:
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
-    app = create_payment_app(payment_service)
+    app = create_payment_app(payment_service, repo, config)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host=config.app_host, port=config.app_port)
