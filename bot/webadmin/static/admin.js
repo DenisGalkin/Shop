@@ -897,7 +897,7 @@ function getDashboardAttentionItems(data) {
       actionLabel: "К платежам",
       action: `setTab('payments')`,
     });
-  });
+  }
   return items.slice(0, 8);
 }
 
