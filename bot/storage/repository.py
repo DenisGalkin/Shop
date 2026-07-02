@@ -789,6 +789,43 @@ class ShopRepository:
         await self.db.commit()
         return added, skipped
 
+    async def list_admin_stock_items(self, product_id: int) -> list[dict[str, Any]]:
+        await self.release_expired_reservations()
+        rows = await self._fetchall(
+            """
+            SELECT id, product_id, key_value, status, order_id, reserved_payment_id, reserved_until, created_at, sold_at
+            FROM stock_items
+            WHERE product_id = ?
+            ORDER BY
+                CASE status
+                    WHEN 'available' THEN 0
+                    WHEN 'reserved' THEN 1
+                    WHEN 'sold' THEN 2
+                    ELSE 3
+                END,
+                id DESC
+            """,
+            (product_id,),
+        )
+        return [dict(row) for row in rows]
+
+    async def delete_admin_stock_item(self, product_id: int, stock_item_id: int) -> bool:
+        await self.release_expired_reservations()
+        row = await self._fetchone(
+            "SELECT id, status FROM stock_items WHERE id = ? AND product_id = ?",
+            (stock_item_id, product_id),
+        )
+        if row is None:
+            return False
+        if row["status"] != "available":
+            raise ValueError("Можно удалить только доступный ключ, который еще не продан и не зарезервирован")
+        await self.db.execute(
+            "DELETE FROM stock_items WHERE id = ? AND product_id = ? AND status = 'available'",
+            (stock_item_id, product_id),
+        )
+        await self.db.commit()
+        return True
+
     async def get_available_stock_count(self, product_id: int) -> int:
         await self.release_expired_reservations()
         row = await self._fetchone(
@@ -1452,18 +1489,45 @@ class ShopRepository:
         return [dict(row) for row in rows]
 
     async def get_dashboard_stats(self) -> dict[str, Any]:
+        today = utcnow().date().isoformat()
         queries = {
             "users_total": "SELECT COUNT(*) AS count FROM users",
             "orders_total": "SELECT COUNT(*) AS count FROM orders WHERE status = 'completed'",
             "revenue_total": "SELECT COALESCE(SUM(amount_cents), 0) AS amount FROM orders WHERE status = 'completed'",
+            "orders_today": "SELECT COUNT(*) AS count FROM orders WHERE status = 'completed' AND substr(created_at, 1, 10) = ?",
+            "revenue_today": "SELECT COALESCE(SUM(amount_cents), 0) AS amount FROM orders WHERE status = 'completed' AND substr(created_at, 1, 10) = ?",
             "stock_total": "SELECT COUNT(*) AS count FROM stock_items WHERE status = 'available'",
             "products_total": "SELECT COUNT(*) AS count FROM products",
+            "payments_pending_total": "SELECT COUNT(*) AS count FROM payments WHERE status = 'pending'",
+            "payment_errors_total": "SELECT COUNT(*) AS count FROM payments WHERE status IN ('failed', 'paid_unfulfilled')",
         }
         stats: dict[str, Any] = {}
         for key, query in queries.items():
-            row = await self._fetchone(query)
+            params: tuple[Any, ...] = (today,) if "?" in query else ()
+            row = await self._fetchone(query, params)
             stats[key] = row["amount"] if "amount" in row.keys() else row["count"]
         return stats
+
+    async def get_dashboard_active_buyers(self, limit: int = 5) -> list[dict[str, Any]]:
+        rows = await self._fetchall(
+            """
+            SELECT u.id,
+                   u.tg_id,
+                   u.username,
+                   u.full_name,
+                   COUNT(o.id) AS orders_count,
+                   COALESCE(SUM(o.amount_cents), 0) AS total_spent_cents,
+                   MAX(o.created_at) AS last_order_at
+            FROM users u
+            JOIN orders o ON o.user_id = u.id
+            WHERE o.status = 'completed'
+            GROUP BY u.id
+            ORDER BY last_order_at DESC, orders_count DESC, total_spent_cents DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in rows]
 
     async def _apply_referral_reward_locked(
         self,

@@ -29,11 +29,11 @@ def _html_shell() -> str:
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/assets/admin.css?v=2" />
+    <link rel="stylesheet" href="/admin/assets/admin.css?v=4" />
   </head>
   <body>
     <div id="app"></div>
-    <script src="/admin/assets/admin.js?v=2" defer></script>
+    <script src="/admin/assets/admin.js?v=4" defer></script>
   </body>
 </html>"""
 
@@ -152,6 +152,20 @@ def _serialize_user(user: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _serialize_dashboard_buyer(user: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": user["id"],
+        "tg_id": user["tg_id"],
+        "username": user["username"] or "",
+        "full_name": user["full_name"],
+        "orders_count": user.get("orders_count", 0),
+        "total_spent_cents": user.get("total_spent_cents", 0),
+        "total_spent_label": format_money(user.get("total_spent_cents", 0)),
+        "last_order_at": user.get("last_order_at"),
+        "last_order_label": format_date(user.get("last_order_at")),
+    }
+
+
 def _serialize_category(category: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": category["id"],
@@ -183,6 +197,24 @@ def _serialize_product(product: dict[str, Any]) -> dict[str, Any]:
         "stock_count": product["stock_count"],
         "sold_count": product.get("sold_count", 0),
         "is_active": bool(product["is_active"]),
+    }
+
+
+def _serialize_stock_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item["id"],
+        "product_id": item["product_id"],
+        "key_value": item["key_value"],
+        "status": item["status"],
+        "order_id": item.get("order_id"),
+        "reserved_payment_id": item.get("reserved_payment_id"),
+        "reserved_until": item.get("reserved_until"),
+        "reserved_until_label": format_date(item.get("reserved_until")),
+        "created_at": item["created_at"],
+        "created_label": format_date(item["created_at"]),
+        "sold_at": item.get("sold_at"),
+        "sold_label": format_date(item.get("sold_at")),
+        "can_delete": item["status"] == "available",
     }
 
 
@@ -231,7 +263,7 @@ async def admin_dashboard(request: web.Request) -> web.Response:
     recent_payments = [*_map(_serialize_payment, await repo.get_recent_payments(limit=8))]
     categories = await repo.list_admin_categories()
     products = await repo.list_admin_products()
-    users = await repo.list_admin_users(limit=8)
+    active_buyers = await repo.get_dashboard_active_buyers(limit=5)
     timeseries_rows = await repo.get_dashboard_timeseries(days=7)
     timeseries_map = {row["day"]: row for row in timeseries_rows}
     series: list[dict[str, Any]] = []
@@ -246,21 +278,33 @@ async def admin_dashboard(request: web.Request) -> web.Response:
                 "revenue_label": format_money(int(row.get("revenue_cents", 0))),
             }
         )
-    low_stock = [product for product in products if product["is_active"] and product["stock_count"] <= 3][:6]
+    out_of_stock = [product for product in products if product["is_active"] and product["stock_count"] == 0]
+    low_stock = [product for product in products if product["is_active"] and product["stock_count"] <= 3][:5]
+    hidden_stocked_products = [product for product in products if not product["is_active"] and product["stock_count"] > 0][:5]
+    empty_categories = [category for category in categories if category["products_count"] == 0][:5]
+    sales_last_7_days_total = sum(item["revenue_cents"] for item in series)
     return web.json_response(
         {
             "ok": True,
             "stats": {
                 **stats,
                 "revenue_label": format_money(stats["revenue_total"]),
+                "revenue_today_label": format_money(stats["revenue_today"]),
                 "categories_total": len(categories),
-                "payments_pending_total": sum(1 for item in recent_payments if item["status"] == "pending"),
+                "products_without_keys_total": len(out_of_stock),
+                "hidden_stocked_products_total": len([product for product in products if not product["is_active"] and product["stock_count"] > 0]),
+                "categories_without_products_total": len([category for category in categories if category["products_count"] == 0]),
+                "sales_last_7_days_total": sales_last_7_days_total,
+                "sales_last_7_days_label": format_money(sales_last_7_days_total),
             },
             "series": series,
             "recent_orders": recent_orders,
             "recent_payments": recent_payments,
-            "top_users": [*_map(_serialize_user, users)],
+            "active_buyers": [*_map(_serialize_dashboard_buyer, active_buyers)],
             "low_stock": [*_map(_serialize_product, low_stock)],
+            "out_of_stock": [*_map(_serialize_product, out_of_stock[:5])],
+            "hidden_stocked_products": [*_map(_serialize_product, hidden_stocked_products)],
+            "empty_categories": [*_map(_serialize_category, empty_categories)],
         }
     )
 
@@ -392,6 +436,9 @@ async def admin_product_stock(request: web.Request) -> web.Response:
     await _require_admin(request)
     repo: ShopRepository = request.app["repo"]
     product_id = int(request.match_info["product_id"])
+    product = await repo.get_product(product_id)
+    if product is None:
+        return _json_error("Товар не найден", status=404)
     payload = await _get_json(request)
     keys_raw = str(payload.get("keys", ""))
     keys = [line.strip() for line in keys_raw.splitlines() if line.strip()]
@@ -407,6 +454,35 @@ async def admin_product_stock(request: web.Request) -> web.Response:
             "item": _serialize_product(product or {}),
         }
     )
+
+
+async def admin_product_stock_items(request: web.Request) -> web.Response:
+    await _require_admin(request)
+    repo: ShopRepository = request.app["repo"]
+    product_id = int(request.match_info["product_id"])
+    product = await repo.get_product(product_id)
+    if product is None:
+        return _json_error("Товар не найден", status=404)
+    items = [*_map(_serialize_stock_item, await repo.list_admin_stock_items(product_id))]
+    return web.json_response({"ok": True, "product": _serialize_product(product), "items": items})
+
+
+async def admin_product_stock_item_delete(request: web.Request) -> web.Response:
+    await _require_admin(request)
+    repo: ShopRepository = request.app["repo"]
+    product_id = int(request.match_info["product_id"])
+    stock_item_id = int(request.match_info["stock_item_id"])
+    product = await repo.get_product(product_id)
+    if product is None:
+        return _json_error("Товар не найден", status=404)
+    try:
+        deleted = await repo.delete_admin_stock_item(product_id, stock_item_id)
+    except ValueError as exc:
+        return _json_error(str(exc), status=409)
+    if not deleted:
+        return _json_error("Ключ не найден", status=404)
+    updated_product = await repo.get_product(product_id)
+    return web.json_response({"ok": True, "item": _serialize_product(updated_product or product)})
 
 
 async def admin_users(request: web.Request) -> web.Response:
@@ -489,6 +565,8 @@ def setup_admin_routes(app: web.Application) -> None:
     app.router.add_patch("/admin/api/products/{product_id:\\d+}", admin_product_update)
     app.router.add_post("/admin/api/products/{product_id:\\d+}/toggle", admin_product_toggle)
     app.router.add_post("/admin/api/products/{product_id:\\d+}/stock", admin_product_stock)
+    app.router.add_get("/admin/api/products/{product_id:\\d+}/stock-items", admin_product_stock_items)
+    app.router.add_delete("/admin/api/products/{product_id:\\d+}/stock-items/{stock_item_id:\\d+}", admin_product_stock_item_delete)
     app.router.add_get("/admin/api/users", admin_users)
     app.router.add_post("/admin/api/users/{tg_id:\\d+}/balance", admin_user_balance)
     app.router.add_get("/admin/api/orders", admin_orders)
