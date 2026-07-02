@@ -11,8 +11,9 @@ from aiogram.enums import ParseMode
 from bot.config import load_config
 from bot.handlers import admin, user
 from bot.services.cryptobot_client import CryptoBotClient
+from bot.services.lolzteam_client import LolzteamClient
 from bot.services.payment_web import create_payment_app
-from bot.services.payments import CryptoBotPaymentService
+from bot.services.payments import CryptoBotPaymentService, LolzteamPaymentService, PaymentService
 from bot.storage.repository import ShopRepository
 
 
@@ -35,7 +36,10 @@ async def main() -> None:
         connector=TCPConnector(ssl=ssl_context),
     )
     cryptobot_client = CryptoBotClient(http_session, config.cryptopay_api_base, config.cryptopay_api_token)
-    payment_service = CryptoBotPaymentService(repo=repo, config=config, client=cryptobot_client, bot=bot)
+    lolzteam_client = LolzteamClient(http_session, config.lolz_api_base, config.lolz_api_token)
+    cryptobot_service = CryptoBotPaymentService(repo=repo, config=config, client=cryptobot_client, bot=bot)
+    lolzteam_service = LolzteamPaymentService(repo=repo, config=config, client=lolzteam_client, bot=bot)
+    payment_service = PaymentService(repo=repo, cryptobot=cryptobot_service, lolzteam=lolzteam_service)
     dp = Dispatcher()
     dp["config"] = config
     dp["repo"] = repo
@@ -44,7 +48,7 @@ async def main() -> None:
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
-    app = create_payment_app(payment_service, repo, config)
+    app = create_payment_app(payment_service, cryptobot_service, lolzteam_service, repo, config)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host=config.app_host, port=config.app_port)

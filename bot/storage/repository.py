@@ -1151,12 +1151,13 @@ class ShopRepository:
             return None
         return await self.get_order(row["user_id"], row["order_id"])
 
-    async def create_crypto_payment(
+    async def create_payment(
         self,
         *,
         user_id: int,
         amount_cents: int,
         currency: str,
+        payment_type: str,
         purpose: str,
         product_id: int | None = None,
         lifetime_seconds: int = 3600,
@@ -1207,12 +1208,13 @@ class ShopRepository:
                     user_id, amount_cents, currency, payment_type, purpose, product_id,
                     reserved_stock_item_id, provider_payment_id, provider_status, status,
                     meta_json, created_at, updated_at, expires_at
-                ) VALUES(?, ?, ?, 'cryptobot', ?, ?, ?, ?, 'creating', 'pending', '{}', ?, ?, ?)
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'creating', 'pending', '{}', ?, ?, ?)
                 """,
                 (
                     user_id,
                     amount_cents,
                     currency,
+                    payment_type,
                     purpose,
                     product_id,
                     reserved_stock_item_id,
@@ -1230,10 +1232,30 @@ class ShopRepository:
         payment = await self.get_payment_by_id(payment_id)
         return payment or {}
 
+    async def create_crypto_payment(
+        self,
+        *,
+        user_id: int,
+        amount_cents: int,
+        currency: str,
+        purpose: str,
+        product_id: int | None = None,
+        lifetime_seconds: int = 3600,
+    ) -> dict[str, Any]:
+        return await self.create_payment(
+            user_id=user_id,
+            amount_cents=amount_cents,
+            currency=currency,
+            payment_type="cryptobot",
+            purpose=purpose,
+            product_id=product_id,
+            lifetime_seconds=lifetime_seconds,
+        )
+
     async def get_payment_by_id(self, payment_id: int) -> dict[str, Any] | None:
         row = await self._fetchone(
             """
-            SELECT p.*, u.tg_id, u.username, u.full_name, pr.title AS product_title
+            SELECT p.*, u.tg_id, u.username, u.full_name, u.language_code, pr.title AS product_title
                    , pr.title_i18n AS product_title_i18n
             FROM payments p
             JOIN users u ON u.id = p.user_id
@@ -1247,7 +1269,7 @@ class ShopRepository:
     async def get_user_payment_by_id(self, tg_user_id: int, payment_id: int) -> dict[str, Any] | None:
         row = await self._fetchone(
             """
-            SELECT p.*, u.tg_id, pr.title AS product_title
+            SELECT p.*, u.tg_id, u.username, u.full_name, u.language_code, pr.title AS product_title
                    , pr.title_i18n AS product_title_i18n
             FROM payments p
             JOIN users u ON u.id = p.user_id
@@ -1258,7 +1280,7 @@ class ShopRepository:
         )
         return dict(row) if row else None
 
-    async def attach_crypto_invoice(self, payment_id: int, invoice: dict[str, Any]) -> dict[str, Any]:
+    async def attach_cryptobot_invoice(self, payment_id: int, invoice: dict[str, Any]) -> dict[str, Any]:
         await self.db.execute(
             """
             UPDATE payments
@@ -1293,7 +1315,41 @@ class ShopRepository:
         await self.db.commit()
         payment = await self.get_payment_by_id(payment_id)
         if invoice.get("status") == "paid":
-            result = await self.apply_crypto_invoice(invoice)
+            result = await self.apply_cryptobot_invoice(invoice)
+            return result.get("payment") or payment or {}
+        return payment or {}
+
+    async def attach_lolzteam_invoice(self, payment_id: int, invoice: dict[str, Any]) -> dict[str, Any]:
+        await self.db.execute(
+            """
+            UPDATE payments
+            SET provider_invoice_id = ?,
+                provider_invoice_url = ?,
+                provider_status = ?,
+                merchant_id = ?,
+                external_amount = ?,
+                error_text = NULL,
+                updated_at = ?,
+                expires_at = COALESCE(?, expires_at),
+                last_checked_at = ?
+            WHERE id = ?
+            """,
+            (
+                invoice.get("invoice_id"),
+                invoice.get("url"),
+                invoice.get("status", "not_paid"),
+                invoice.get("merchant_id"),
+                str(invoice.get("amount", "")),
+                utcnow_iso(),
+                epoch_to_iso(invoice.get("expires_at")),
+                utcnow_iso(),
+                payment_id,
+            ),
+        )
+        await self.db.commit()
+        payment = await self.get_payment_by_id(payment_id)
+        if invoice.get("status") == "paid":
+            result = await self.apply_lolzteam_invoice(invoice)
             return result.get("payment") or payment or {}
         return payment or {}
 
@@ -1320,22 +1376,21 @@ class ShopRepository:
             await self.db.rollback()
             raise
 
-    async def list_pending_crypto_payments(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_pending_payments(self, payment_type: str, limit: int = 50) -> list[dict[str, Any]]:
         rows = await self._fetchall(
             """
             SELECT *
             FROM payments
-            WHERE payment_type = 'cryptobot'
+            WHERE payment_type = ?
               AND status = 'pending'
-              AND provider_invoice_id IS NOT NULL
             ORDER BY COALESCE(last_checked_at, created_at) ASC
             LIMIT ?
             """,
-            (limit,),
+            (payment_type, limit),
         )
         return [dict(row) for row in rows]
 
-    async def apply_crypto_invoice(self, invoice: dict[str, Any]) -> dict[str, Any]:
+    async def apply_cryptobot_invoice(self, invoice: dict[str, Any]) -> dict[str, Any]:
         provider_invoice_id = invoice.get("invoice_id")
         if not provider_invoice_id:
             raise ValueError("Invoice invoice_id is missing")
@@ -1390,6 +1445,102 @@ class ShopRepository:
                 or invoice.get("web_app_invoice_url")
                 or payment.get("provider_invoice_url")
             )
+            payment["external_amount"] = str(invoice.get("amount", "")) or payment.get("external_amount")
+            payment["expires_at"] = expires_at_iso
+
+            if invoice.get("status") == "paid":
+                result = await self._complete_paid_payment_locked(payment)
+                await self.db.commit()
+                return result
+
+            now_iso = utcnow_iso()
+            if expires_at_iso and expires_at_iso <= now_iso:
+                await self.db.execute(
+                    """
+                    UPDATE payments
+                    SET status = 'expired',
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (utcnow_iso(), payment["id"]),
+                )
+                if payment.get("reserved_stock_item_id"):
+                    await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                payment["status"] = "expired"
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                await self.db.commit()
+                return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
+
+            await self.db.execute(
+                "UPDATE payments SET status = 'pending', updated_at = ? WHERE id = ?",
+                (utcnow_iso(), payment["id"]),
+            )
+            payment["status"] = "pending"
+            user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+            await self.db.commit()
+            return {"action": "pending", "payment": payment, "user": dict(user) if user else {}, "order": None}
+        except Exception:
+            await self.db.rollback()
+            raise
+
+    async def apply_lolzteam_invoice(self, invoice: dict[str, Any]) -> dict[str, Any]:
+        provider_invoice_id = invoice.get("invoice_id")
+        provider_payment_id = invoice.get("payment_id")
+        if not provider_invoice_id and not provider_payment_id:
+            raise ValueError("Lolzteam invoice identifiers are missing")
+        await self.db.execute("BEGIN IMMEDIATE")
+        try:
+            if provider_invoice_id:
+                payment_row = await self._fetchone(
+                    "SELECT * FROM payments WHERE provider_invoice_id = ?",
+                    (provider_invoice_id,),
+                )
+            else:
+                payment_row = await self._fetchone(
+                    "SELECT * FROM payments WHERE provider_payment_id = ?",
+                    (provider_payment_id,),
+                )
+            if payment_row is None:
+                raise ValueError("Payment not found for invoice")
+            payment = dict(payment_row)
+            if payment["status"] == "completed":
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                order = None
+                if payment["order_id"]:
+                    order = await self.get_order(payment["user_id"], payment["order_id"])
+                await self.db.rollback()
+                return {"action": "already_completed", "payment": payment, "user": dict(user) if user else {}, "order": order}
+
+            expires_at_iso = epoch_to_iso(invoice.get("expires_at")) or payment.get("expires_at")
+            await self.db.execute(
+                """
+                UPDATE payments
+                SET provider_invoice_id = COALESCE(?, provider_invoice_id),
+                    provider_invoice_url = COALESCE(?, provider_invoice_url),
+                    provider_status = ?,
+                    merchant_id = COALESCE(?, merchant_id),
+                    external_amount = ?,
+                    updated_at = ?,
+                    expires_at = COALESCE(?, expires_at),
+                    last_checked_at = ?
+                WHERE id = ?
+                """,
+                (
+                    invoice.get("invoice_id"),
+                    invoice.get("url"),
+                    invoice.get("status", "not_paid"),
+                    invoice.get("merchant_id"),
+                    str(invoice.get("amount", "")),
+                    utcnow_iso(),
+                    expires_at_iso,
+                    utcnow_iso(),
+                    payment["id"],
+                ),
+            )
+            payment["provider_status"] = invoice.get("status", "not_paid")
+            payment["provider_invoice_id"] = invoice.get("invoice_id") or payment.get("provider_invoice_id")
+            payment["provider_invoice_url"] = invoice.get("url") or payment.get("provider_invoice_url")
+            payment["provider_payment_id"] = invoice.get("payment_id") or payment.get("provider_payment_id")
             payment["external_amount"] = str(invoice.get("amount", "")) or payment.get("external_amount")
             payment["expires_at"] = expires_at_iso
 
@@ -1507,13 +1658,14 @@ class ShopRepository:
             INSERT INTO orders(
                 user_id, product_id, stock_item_id, amount_cents, status,
                 payment_method, payment_status, created_at, completed_at, payload_json
-            ) VALUES(?, ?, ?, ?, 'completed', 'cryptobot', 'paid', ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, 'completed', ?, 'paid', ?, ?, ?)
             """,
             (
                 payment["user_id"],
                 payment["product_id"],
                 stock_item_id,
                 payment["amount_cents"],
+                payment["payment_type"],
                 utcnow_iso(),
                 utcnow_iso(),
                 json.dumps({"payment_id": payment["id"], "provider_payment_id": payment["provider_payment_id"]}),

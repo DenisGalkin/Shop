@@ -31,6 +31,16 @@ class Config:
     cryptopay_webhook_path_token: str
     cryptopay_webhook_max_age_seconds: int
     cryptopay_sync_interval_seconds: int
+    lolz_api_base: str
+    lolz_merchant_id: int
+    lolz_api_token: str
+    lolz_merchant_token: str
+    lolz_webhook_secret: str
+    lolz_invoice_currency: str
+    lolz_invoice_lifetime: int
+    lolz_webhook_path_token: str
+    lolz_sync_interval_seconds: int
+    lolz_is_test: bool
     admin_web_username: str
     admin_web_password: str
     admin_web_secret: str
@@ -39,6 +49,10 @@ class Config:
     @property
     def cryptopay_enabled(self) -> bool:
         return bool(self.cryptopay_api_token)
+
+    @property
+    def lolz_enabled(self) -> bool:
+        return bool(self.lolz_merchant_id and self.lolz_api_token)
 
     @property
     def admin_web_enabled(self) -> bool:
@@ -70,14 +84,20 @@ def load_config() -> Config:
     Path(database_path).parent.mkdir(parents=True, exist_ok=True)
 
     cryptopay_api_token = os.getenv("CRYPTOPAY_API_TOKEN", "").strip()
-    webhook_token = os.getenv("CRYPTOPAY_WEBHOOK_PATH_TOKEN", "").strip()
-    if cryptopay_api_token and not webhook_token:
-        webhook_token = sha256(cryptopay_api_token.encode("utf-8")).hexdigest()
+    cryptopay_webhook_token = os.getenv("CRYPTOPAY_WEBHOOK_PATH_TOKEN", "").strip()
+    if cryptopay_api_token and not cryptopay_webhook_token:
+        cryptopay_webhook_token = sha256(cryptopay_api_token.encode("utf-8")).hexdigest()
+    lolz_api_token = os.getenv("LOLZ_API_TOKEN", "").strip()
+    lolz_merchant_token = os.getenv("LOLZ_MERCHANT_TOKEN", "").strip()
+    lolz_webhook_token = os.getenv("LOLZ_WEBHOOK_PATH_TOKEN", "").strip()
+    if lolz_merchant_token and not lolz_webhook_token:
+        lolz_webhook_token = sha256(lolz_merchant_token.encode("utf-8")).hexdigest()
+    webhook_secret = os.getenv("LOLZ_WEBHOOK_SECRET", "").strip() or lolz_merchant_token
     admin_web_secret = os.getenv("ADMIN_WEB_SECRET", "").strip()
     if not admin_web_secret:
         admin_web_secret = base64.urlsafe_b64encode(sha256(bot_token.encode("utf-8")).digest()).decode("ascii")
 
-    return Config(
+    config = Config(
         bot_token=bot_token,
         bot_username=os.getenv("BOT_USERNAME", "").strip(),
         support_username=os.getenv("SUPPORT_USERNAME", "support").strip().lstrip("@"),
@@ -95,11 +115,24 @@ def load_config() -> Config:
         cryptopay_accepted_assets=_parse_csv(os.getenv("CRYPTOPAY_ACCEPTED_ASSETS", "")),
         cryptopay_allow_comments=_parse_bool(os.getenv("CRYPTOPAY_ALLOW_COMMENTS"), default=False),
         cryptopay_allow_anonymous=_parse_bool(os.getenv("CRYPTOPAY_ALLOW_ANONYMOUS"), default=False),
-        cryptopay_webhook_path_token=webhook_token,
+        cryptopay_webhook_path_token=cryptopay_webhook_token,
         cryptopay_webhook_max_age_seconds=int(os.getenv("CRYPTOPAY_WEBHOOK_MAX_AGE_SECONDS", "900")),
         cryptopay_sync_interval_seconds=int(os.getenv("CRYPTOPAY_SYNC_INTERVAL_SECONDS", "60")),
+        lolz_api_base=os.getenv("LOLZ_API_BASE", "https://prod-api.lzt.market").strip().rstrip("/"),
+        lolz_merchant_id=int(os.getenv("LOLZ_MERCHANT_ID", "0") or "0"),
+        lolz_api_token=lolz_api_token,
+        lolz_merchant_token=lolz_merchant_token,
+        lolz_webhook_secret=webhook_secret,
+        lolz_invoice_currency=os.getenv("LOLZ_INVOICE_CURRENCY", "USD").strip().upper(),
+        lolz_invoice_lifetime=int(os.getenv("LOLZ_INVOICE_LIFETIME", "3600")),
+        lolz_webhook_path_token=lolz_webhook_token,
+        lolz_sync_interval_seconds=int(os.getenv("LOLZ_SYNC_INTERVAL_SECONDS", "60")),
+        lolz_is_test=_parse_bool(os.getenv("LOLZ_IS_TEST"), default=False),
         admin_web_username=os.getenv("ADMIN_WEB_USERNAME", "admin").strip(),
         admin_web_password=os.getenv("ADMIN_WEB_PASSWORD", "").strip(),
         admin_web_secret=admin_web_secret,
         admin_web_session_ttl_hours=int(os.getenv("ADMIN_WEB_SESSION_TTL_HOURS", "24")),
     )
+    if (config.cryptopay_enabled or config.lolz_enabled) and not config.public_base_url:
+        raise RuntimeError("PUBLIC_BASE_URL is required when CryptoBot or Lolzteam payments are enabled")
+    return config

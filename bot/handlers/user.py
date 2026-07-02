@@ -26,7 +26,7 @@ from bot.keyboards.common import (
     referral_kb,
     restock_notification_kb,
 )
-from bot.services.payments import CryptoBotPaymentService
+from bot.services.payments import PaymentService
 from bot.storage.repository import ShopRepository
 from bot.utils.formatting import format_date, format_money, parse_money_to_cents
 from bot.utils.i18n import language_name, normalize_language_code, tr, translate_error
@@ -292,6 +292,7 @@ async def buy_menu_handler(callback: CallbackQuery, repo: ShopRepository, config
             user["balance_cents"],
             lang,
             cryptobot_enabled=config.cryptopay_enabled,
+            lolz_enabled=config.lolz_enabled,
         ),
     )
 
@@ -343,21 +344,24 @@ async def buy_balance_handler(callback: CallbackQuery, repo: ShopRepository) -> 
 
 
 @router.callback_query(F.data.startswith("buy:crypto:"))
-async def buy_crypto_handler(
+@router.callback_query(F.data.startswith("buy:lolz:"))
+async def buy_invoice_handler(
     callback: CallbackQuery,
     repo: ShopRepository,
-    payment_service: CryptoBotPaymentService,
+    payment_service: PaymentService,
 ) -> None:
     user = await repo.get_user_by_tg_id(callback.from_user.id)
     lang = _user_language(user)
-    product_id = int(callback.data.split(":")[2])
+    _, payment_method, product_id_raw = callback.data.split(":")
+    payment_type = "cryptobot" if payment_method == "crypto" else "lolzteam"
+    product_id = int(product_id_raw)
     product = await repo.get_product(product_id)
     if not product:
         await callback.answer(tr(lang, "product_not_found"), show_alert=True)
         return
     product = repo.localize_product(product, lang)
     try:
-        payment = await payment_service.create_product_invoice(callback.from_user.id, product_id)
+        payment = await payment_service.create_product_invoice(callback.from_user.id, product_id, payment_type)
     except ValueError as exc:
         await callback.answer(translate_error(lang, str(exc)), show_alert=True)
         return
@@ -454,7 +458,7 @@ async def order_detail_handler(callback: CallbackQuery, repo: ShopRepository) ->
 async def deposit_start_handler(callback: CallbackQuery, state: FSMContext, config: Config, repo: ShopRepository) -> None:
     user = await repo.get_user_by_tg_id(callback.from_user.id)
     lang = _user_language(user)
-    if not config.cryptopay_enabled:
+    if not (config.cryptopay_enabled or config.lolz_enabled):
         await callback.answer(tr(lang, "deposit_unavailable"), show_alert=True)
         return
     await state.set_state(UserStates.waiting_deposit_amount)
@@ -487,14 +491,22 @@ async def deposit_amount_handler(message: Message, state: FSMContext, config: Co
         amount=format_money(amount_cents),
         choose_emoji=premium_emoji("choose"),
     )
-    await render_message(message, text, reply_markup=deposit_methods_kb(lang, cryptobot_enabled=config.cryptopay_enabled))
+    await render_message(
+        message,
+        text,
+        reply_markup=deposit_methods_kb(
+            lang,
+            cryptobot_enabled=config.cryptopay_enabled,
+            lolz_enabled=config.lolz_enabled,
+        ),
+    )
 
 
 @router.callback_query(F.data.startswith("deposit:method:"))
 async def deposit_method_handler(
     callback: CallbackQuery,
     state: FSMContext,
-    payment_service: CryptoBotPaymentService,
+    payment_service: PaymentService,
     repo: ShopRepository,
 ) -> None:
     user = await repo.get_user_by_tg_id(callback.from_user.id)
@@ -505,11 +517,11 @@ async def deposit_method_handler(
         await callback.answer(tr(lang, "enter_amount_first"), show_alert=True)
         return
     method = callback.data.split(":")[2]
-    if method != "cryptobot":
+    if method not in {"cryptobot", "lolzteam"}:
         await callback.answer(tr(lang, "payment_method_unavailable"), show_alert=True)
         return
     try:
-        payment = await payment_service.create_deposit_invoice(callback.from_user.id, amount_cents)
+        payment = await payment_service.create_deposit_invoice(callback.from_user.id, amount_cents, method)
     except ValueError as exc:
         await callback.answer(translate_error(lang, str(exc)), show_alert=True)
         return
@@ -533,7 +545,7 @@ async def deposit_method_handler(
 async def payment_check_handler(
     callback: CallbackQuery,
     repo: ShopRepository,
-    payment_service: CryptoBotPaymentService,
+    payment_service: PaymentService,
 ) -> None:
     user = await repo.get_user_by_tg_id(callback.from_user.id)
     lang = _user_language(user)

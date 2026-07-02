@@ -30,24 +30,17 @@ class CryptoBotClient:
         }
 
     async def create_invoice(self, payload: dict[str, Any]) -> dict[str, Any]:
-        for attempt in range(3):
-            try:
-                response = await self._request("POST", "/createInvoice", json_payload=payload)
-                invoice = response.get("result")
-                if not isinstance(invoice, dict):
-                    raise CryptoBotApiError("Crypto Pay did not return invoice payload")
-                return invoice
-            except (ClientError, asyncio.TimeoutError):
-                if attempt == 2:
-                    raise
-                await asyncio.sleep(0.8 * (attempt + 1))
-        raise CryptoBotApiError("Unable to create invoice")
+        response = await self._request_with_retries("POST", "/createInvoice", json_payload=payload)
+        invoice = response.get("result")
+        if not isinstance(invoice, dict):
+            raise CryptoBotApiError("Crypto Pay did not return invoice payload")
+        return invoice
 
     async def get_invoices(self, *, invoice_ids: list[int] | None = None) -> list[dict[str, Any]]:
         params: dict[str, Any] = {}
         if invoice_ids:
             params["invoice_ids"] = ",".join(str(invoice_id) for invoice_id in invoice_ids)
-        response = await self._request("GET", "/getInvoices", params=params)
+        response = await self._request_with_retries("GET", "/getInvoices", params=params)
         invoices = response.get("result", {}).get("items")
         if not isinstance(invoices, list):
             raise CryptoBotApiError("Crypto Pay did not return invoices list")
@@ -88,6 +81,23 @@ class CryptoBotClient:
             if not data.get("ok", False):
                 raise CryptoBotApiError(self._extract_error_message(data, response.status))
             return data
+
+    async def _request_with_retries(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        for attempt in range(3):
+            try:
+                return await self._request(method, path, params=params, json_payload=json_payload)
+            except (ClientError, asyncio.TimeoutError):
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(0.8 * (attempt + 1))
+        raise CryptoBotApiError("Crypto Pay request failed")
 
     @staticmethod
     def cents_to_amount(cents: int) -> str:

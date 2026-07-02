@@ -726,6 +726,7 @@ function formatUserLabel(name, username, tgId) {
 function formatPaymentProvider(value) {
   const map = {
     cryptobot: "CryptoBot",
+    lolzteam: "Lolzteam",
   };
   return map[value] || value || "—";
 }
@@ -1440,7 +1441,7 @@ function renderPayments() {
   const resource = getResource("payments");
   return `
     <section class="panel">
-      ${renderSectionHeader("Платежи", "Статусы счетов CryptoBot, пополнений и покупок товара через платежный flow.")}
+      ${renderSectionHeader("Платежи", "Статусы счетов CryptoBot и Lolzteam, пополнений и покупок товара через платежный flow.")}
       ${
         resource.loading && !state.payments.length
           ? `<div class="table-skeleton">${renderSkeletonRows(3, 6)}</div>`

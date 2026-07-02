@@ -144,7 +144,14 @@ def product_card_out_of_stock_kb(product_id: int, notifications_enabled: bool, l
     return builder.as_markup()
 
 
-def purchase_methods_kb(product_id: int, balance_cents: int, lang: str, *, cryptobot_enabled: bool) -> InlineKeyboardMarkup:
+def purchase_methods_kb(
+    product_id: int,
+    balance_cents: int,
+    lang: str,
+    *,
+    cryptobot_enabled: bool,
+    lolz_enabled: bool,
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
         text=tr(lang, "buy_balance_option", balance=format_money(balance_cents)),
@@ -156,6 +163,12 @@ def purchase_methods_kb(product_id: int, balance_cents: int, lang: str, *, crypt
             text="CryptoBot",
             callback_data=f"buy:crypto:{product_id}",
             icon_custom_emoji_id=premium_button_icon("cryptobot"),
+        )
+    if lolz_enabled:
+        builder.button(
+            text="Lolzteam",
+            callback_data=f"buy:lolz:{product_id}",
+            icon_custom_emoji_id=premium_button_icon("lolz"),
         )
     builder.button(
         text=tr(lang, "cancel_purchase"),
@@ -218,13 +231,19 @@ def deposit_cancel_kb(lang: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def deposit_methods_kb(lang: str, *, cryptobot_enabled: bool) -> InlineKeyboardMarkup:
+def deposit_methods_kb(lang: str, *, cryptobot_enabled: bool, lolz_enabled: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if cryptobot_enabled:
         builder.button(
             text="CryptoBot",
             callback_data="deposit:method:cryptobot",
             icon_custom_emoji_id=premium_button_icon("cryptobot"),
+        )
+    if lolz_enabled:
+        builder.button(
+            text="Lolzteam",
+            callback_data="deposit:method:lolzteam",
+            icon_custom_emoji_id=premium_button_icon("lolz"),
         )
     builder.button(text=tr(lang, "cancel"), callback_data="deposit:cancel", icon_custom_emoji_id=premium_button_icon("cancel"))
     builder.adjust(1)

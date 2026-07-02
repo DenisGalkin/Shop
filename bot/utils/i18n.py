@@ -172,10 +172,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "{category_emoji} Ключ:\n<code>{key_value}</code>\n\n"
             "Покупка сохранена в разделе «Мои покупки»."
         ),
-        "secure_connection_error": "Не удалось установить защищенное соединение с Crypto Pay. Попробуйте еще раз через минуту.",
+        "secure_connection_error": "Не удалось установить защищенное соединение с платёжным шлюзом. Попробуйте еще раз через минуту.",
         "gateway_unavailable": "Платежный шлюз временно недоступен. Попробуйте еще раз чуть позже.",
         "invoice_create_failed": "Не удалось создать счет. Попробуйте еще раз позже.",
         "cryptopay_not_configured": "Crypto Pay не настроен",
+        "lolz_not_configured": "Lolzteam не настроен",
         "payment_not_found": "Платёж не найден",
         "user_not_found": "Пользователь не найден",
         "product_unavailable": "Товар недоступен",
@@ -185,7 +186,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "shop_product_fallback": "Товар магазина",
     },
     "en": {
-        "choose_language_prompt": '[5447410659077661506] Choose language / Выберите язык / Виберiть мову',
+        "choose_language_prompt": '{globus} Choose language / Выберите язык / Виберiть мову',
         "language_english": "English",
         "language_russian": "Russian",
         "language_ukrainian": "Ukrainian",
@@ -349,10 +350,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "{category_emoji} Key:\n<code>{key_value}</code>\n\n"
             "The purchase has been saved in the “My purchases” section."
         ),
-        "secure_connection_error": "Could not establish a secure connection to Crypto Pay. Please try again in a minute.",
+        "secure_connection_error": "Could not establish a secure connection to the payment gateway. Please try again in a minute.",
         "gateway_unavailable": "The payment gateway is temporarily unavailable. Please try again later.",
         "invoice_create_failed": "Could not create an invoice. Please try again later.",
         "cryptopay_not_configured": "Crypto Pay is not configured",
+        "lolz_not_configured": "Lolzteam is not configured",
         "payment_not_found": "Payment not found",
         "user_not_found": "User not found",
         "product_unavailable": "Product is unavailable",
@@ -526,10 +528,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "{category_emoji} Ключ:\n<code>{key_value}</code>\n\n"
             "Покупку збережено в розділі «Мої покупки»."
         ),
-        "secure_connection_error": "Не вдалося встановити захищене з'єднання з Crypto Pay. Спробуйте ще раз за хвилину.",
+        "secure_connection_error": "Не вдалося встановити захищене з'єднання з платіжним шлюзом. Спробуйте ще раз за хвилину.",
         "gateway_unavailable": "Платіжний шлюз тимчасово недоступний. Спробуйте ще раз трохи пізніше.",
         "invoice_create_failed": "Не вдалося створити рахунок. Спробуйте ще раз пізніше.",
         "cryptopay_not_configured": "Crypto Pay не налаштовано",
+        "lolz_not_configured": "Lolzteam не налаштовано",
         "payment_not_found": "Платіж не знайдено",
         "user_not_found": "Користувача не знайдено",
         "product_unavailable": "Товар недоступний",
@@ -565,6 +568,7 @@ ERROR_TRANSLATION_KEYS = {
     "Не удалось зарезервировать товар": "unable_to_reserve_product",
     "No referral balance available": "no_referral_balance",
     "Crypto Pay не настроен": "cryptopay_not_configured",
+    "Lolzteam не настроен": "lolz_not_configured",
 }
 
 
