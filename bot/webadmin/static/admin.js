@@ -14,7 +14,7 @@ const state = {
     usersSearch: "",
   },
   forms: {
-    category: { title: "", description: "", sort_order: "0" },
+    category: { title: "", description: "", premium_emoji_id: "", sort_order: "0" },
     product: {
       id: "",
       category_id: "",
@@ -181,10 +181,11 @@ async function submitCategory(event) {
       body: JSON.stringify({
         title: form.get("title"),
         description: form.get("description"),
+        premium_emoji_id: form.get("premium_emoji_id"),
         sort_order: form.get("sort_order"),
       }),
     });
-    state.forms.category = { title: "", description: "", sort_order: "0" };
+    state.forms.category = { title: "", description: "", premium_emoji_id: "", sort_order: "0" };
     await Promise.all([loadCategories(), loadDashboard()]);
     showToast("Категория создана");
     render();
@@ -207,11 +208,12 @@ async function toggleCategory(categoryId) {
 async function saveCategory(categoryId) {
   const title = document.querySelector(`[data-category-title="${categoryId}"]`)?.value || "";
   const description = document.querySelector(`[data-category-description="${categoryId}"]`)?.value || "";
+  const premiumEmojiId = document.querySelector(`[data-category-emoji="${categoryId}"]`)?.value || "";
   const sortOrder = document.querySelector(`[data-category-sort="${categoryId}"]`)?.value || "0";
   try {
     await fetchJson(`/admin/api/categories/${categoryId}`, {
       method: "PATCH",
-      body: JSON.stringify({ title, description, sort_order: sortOrder }),
+      body: JSON.stringify({ title, description, premium_emoji_id: premiumEmojiId, sort_order: sortOrder }),
     });
     await Promise.all([loadCategories(), loadDashboard()]);
     showToast("Категория сохранена");
@@ -585,6 +587,10 @@ function renderCatalog() {
                         <input data-category-title="${category.id}" value="${escapeHtml(category.title)}" />
                       </div>
                       <div class="field">
+                        <label>Premium emoji ID</label>
+                        <input class="mono" data-category-emoji="${category.id}" value="${escapeHtml(category.premium_emoji_id || "")}" placeholder="Например: 5341790652990530125" />
+                      </div>
+                      <div class="field">
                         <label>Порядок</label>
                         <input class="mono" data-category-sort="${category.id}" value="${category.sort_order}" />
                       </div>
@@ -678,6 +684,10 @@ function renderCatalog() {
             <div class="field full">
               <label>Описание</label>
               <textarea name="description" rows="4">${escapeHtml(state.forms.category.description)}</textarea>
+            </div>
+            <div class="field">
+              <label>Premium emoji ID</label>
+              <input class="mono" name="premium_emoji_id" value="${escapeHtml(state.forms.category.premium_emoji_id)}" placeholder="Можно оставить пустым" />
             </div>
             <div class="field">
               <label>Порядок</label>

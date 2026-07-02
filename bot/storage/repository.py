@@ -10,6 +10,7 @@ from typing import Any
 import aiosqlite
 
 from bot.config import Config
+from bot.utils.i18n import normalize_language_code
 
 
 def utcnow() -> datetime:
@@ -108,6 +109,7 @@ class ShopRepository:
                 slug TEXT NOT NULL UNIQUE,
                 title TEXT NOT NULL,
                 description TEXT,
+                premium_emoji_id TEXT,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
@@ -228,6 +230,7 @@ class ShopRepository:
         await self.db.commit()
 
     async def _migrate_schema(self) -> None:
+        await self._ensure_column("categories", "premium_emoji_id", "TEXT")
         await self._ensure_column("stock_items", "reserved_payment_id", "TEXT")
         await self._ensure_column("stock_items", "reserved_until", "TEXT")
         await self._ensure_column("payments", "currency", "TEXT NOT NULL DEFAULT 'USD'")
@@ -265,6 +268,21 @@ class ShopRepository:
         await self.db.execute(
             "CREATE INDEX IF NOT EXISTS idx_payments_pending_sync ON payments(payment_type, status, expires_at, last_checked_at)"
         )
+        category_default_icons = {
+            "claude": "5341790816199286662",
+            "chatgpt": "5341790652990530125",
+            "grok": "5341553317392720144",
+        }
+        for slug, premium_emoji_id in category_default_icons.items():
+            await self.db.execute(
+                """
+                UPDATE categories
+                SET premium_emoji_id = ?
+                WHERE slug = ?
+                  AND COALESCE(TRIM(premium_emoji_id), '') = ''
+                """,
+                (premium_emoji_id, slug),
+            )
         await self.db.commit()
 
     async def _ensure_column(self, table_name: str, column_name: str, ddl: str) -> None:
@@ -297,17 +315,17 @@ class ShopRepository:
             return
         now = utcnow_iso()
         categories = [
-            ("claude", "Claude", "Подписки и ключи Anthropic Claude", 10),
-            ("chatgpt", "ChatGPT", "Подписки OpenAI и сопутствующие решения", 20),
-            ("grok", "Grok AI", "Ключи и доступы Grok AI", 30),
+            ("claude", "Claude", "Подписки и ключи Anthropic Claude", "5341790816199286662", 10),
+            ("chatgpt", "ChatGPT", "Подписки OpenAI и сопутствующие решения", "5341790652990530125", 20),
+            ("grok", "Grok AI", "Ключи и доступы Grok AI", "5341553317392720144", 30),
         ]
-        for slug, title, description, sort_order in categories:
+        for slug, title, description, premium_emoji_id, sort_order in categories:
             await self.db.execute(
                 """
-                INSERT INTO categories(slug, title, description, sort_order, created_at)
-                VALUES(?, ?, ?, ?, ?)
+                INSERT INTO categories(slug, title, description, premium_emoji_id, sort_order, created_at)
+                VALUES(?, ?, ?, ?, ?, ?)
                 """,
-                (slug, title, description, sort_order, now),
+                (slug, title, description, premium_emoji_id, sort_order, now),
             )
         await self.db.commit()
 
@@ -419,6 +437,7 @@ class ShopRepository:
     ) -> dict[str, Any]:
         admin_ids = admin_ids or set()
         row = await self._fetchone("SELECT * FROM users WHERE tg_id = ?", (tg_id,))
+        normalized_language = normalize_language_code(language_code)
         if row is None:
             referrer_id = None
             if referrer_tg_id and referrer_tg_id != tg_id:
@@ -430,21 +449,31 @@ class ShopRepository:
                     tg_id, username, full_name, referrer_user_id, language_code, is_admin, created_at
                 ) VALUES(?, ?, ?, ?, ?, ?, ?)
                 """,
-                (tg_id, username, full_name, referrer_id, language_code or "ru", int(tg_id in admin_ids), utcnow_iso()),
+                (tg_id, username, full_name, referrer_id, normalized_language, int(tg_id in admin_ids), utcnow_iso()),
             )
             await self.db.commit()
         else:
+            resolved_language = normalize_language_code(row["language_code"]) if row["language_code"] else normalized_language
             await self.db.execute(
                 """
                 UPDATE users
                 SET username = ?, full_name = ?, language_code = ?, is_admin = ?
                 WHERE tg_id = ?
                 """,
-                (username, full_name, language_code or "ru", int(tg_id in admin_ids or row["is_admin"]), tg_id),
+                (username, full_name, resolved_language, int(tg_id in admin_ids or row["is_admin"]), tg_id),
             )
             await self.db.commit()
         updated = await self._fetchone("SELECT * FROM users WHERE tg_id = ?", (tg_id,))
         return dict(updated)
+
+    async def set_user_language(self, tg_id: int, language_code: str) -> dict[str, Any] | None:
+        normalized_language = normalize_language_code(language_code)
+        await self.db.execute(
+            "UPDATE users SET language_code = ? WHERE tg_id = ?",
+            (normalized_language, tg_id),
+        )
+        await self.db.commit()
+        return await self.get_user_by_tg_id(tg_id)
 
     async def get_user_by_tg_id(self, tg_id: int) -> dict[str, Any] | None:
         row = await self._fetchone("SELECT * FROM users WHERE tg_id = ?", (tg_id,))
@@ -536,23 +565,30 @@ class ShopRepository:
         row = await self._fetchone("SELECT * FROM categories WHERE id = ?", (category_id,))
         return dict(row) if row else None
 
-    async def create_category(self, title: str, description: str) -> int:
+    async def create_category(self, title: str, description: str, premium_emoji_id: str | None = None) -> int:
         slug = await self._unique_slug("categories", title)
         cursor = await self.db.execute(
-            "INSERT INTO categories(slug, title, description, created_at) VALUES(?, ?, ?, ?)",
-            (slug, title, description, utcnow_iso()),
+            "INSERT INTO categories(slug, title, description, premium_emoji_id, created_at) VALUES(?, ?, ?, ?, ?)",
+            (slug, title, description, premium_emoji_id, utcnow_iso()),
         )
         await self.db.commit()
         return cursor.lastrowid
 
-    async def update_category(self, category_id: int, title: str, description: str, sort_order: int) -> None:
+    async def update_category(
+        self,
+        category_id: int,
+        title: str,
+        description: str,
+        sort_order: int,
+        premium_emoji_id: str | None = None,
+    ) -> None:
         await self.db.execute(
             """
             UPDATE categories
-            SET title = ?, description = ?, sort_order = ?
+            SET title = ?, description = ?, sort_order = ?, premium_emoji_id = ?
             WHERE id = ?
             """,
-            (title, description, sort_order, category_id),
+            (title, description, sort_order, premium_emoji_id, category_id),
         )
         await self.db.commit()
 
@@ -570,7 +606,7 @@ class ShopRepository:
     async def list_products(self, category_id: int, only_active: bool = True) -> list[dict[str, Any]]:
         await self.release_expired_reservations()
         query = """
-            SELECT p.*, c.title AS category_title, c.slug AS category_slug,
+            SELECT p.*, c.title AS category_title, c.slug AS category_slug, c.premium_emoji_id AS category_premium_emoji_id,
                    COALESCE(stock.available_count, 0) AS stock_count
             FROM products p
             JOIN categories c ON c.id = p.category_id
@@ -593,7 +629,7 @@ class ShopRepository:
         await self.release_expired_reservations()
         normalized = search.strip()
         query = """
-            SELECT p.*, c.title AS category_title, c.slug AS category_slug,
+            SELECT p.*, c.title AS category_title, c.slug AS category_slug, c.premium_emoji_id AS category_premium_emoji_id,
                    COALESCE(stock.available_count, 0) AS stock_count,
                    COALESCE(stock.sold_count, 0) AS sold_count
             FROM products p
@@ -629,7 +665,7 @@ class ShopRepository:
         await self.release_expired_reservations()
         row = await self._fetchone(
             """
-            SELECT p.*, c.title AS category_title, c.slug AS category_slug,
+            SELECT p.*, c.title AS category_title, c.slug AS category_slug, c.premium_emoji_id AS category_premium_emoji_id,
                    COALESCE(stock.available_count, 0) AS stock_count
             FROM products p
             JOIN categories c ON c.id = p.category_id
@@ -786,7 +822,7 @@ class ShopRepository:
     async def get_stock_notification_recipients(self, product_id: int) -> list[dict[str, Any]]:
         rows = await self._fetchall(
             """
-            SELECT u.tg_id, u.id AS user_id
+            SELECT u.tg_id, u.id AS user_id, u.language_code
             FROM stock_notifications sn
             JOIN users u ON u.id = sn.user_id
             WHERE sn.product_id = ?
@@ -807,7 +843,7 @@ class ShopRepository:
         )
         rows = await self._fetchall(
             """
-            SELECT o.*, p.title AS product_title, c.slug AS category_slug
+            SELECT o.*, p.title AS product_title, c.slug AS category_slug, c.premium_emoji_id AS category_premium_emoji_id
             FROM orders o
             JOIN products p ON p.id = o.product_id
             JOIN categories c ON c.id = p.category_id
@@ -827,7 +863,7 @@ class ShopRepository:
     async def get_order(self, user_id: int, order_id: int) -> dict[str, Any] | None:
         row = await self._fetchone(
             """
-            SELECT o.*, p.title AS product_title, c.slug AS category_slug, s.key_value
+            SELECT o.*, p.title AS product_title, c.slug AS category_slug, c.premium_emoji_id AS category_premium_emoji_id, s.key_value
             FROM orders o
             JOIN products p ON p.id = o.product_id
             JOIN categories c ON c.id = p.category_id

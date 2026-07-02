@@ -14,7 +14,8 @@ from aiohttp import ClientConnectorCertificateError, ClientError
 from bot.config import Config
 from bot.storage.repository import ShopRepository
 from bot.utils.formatting import format_money
-from bot.utils.premium_emoji import category_emoji_name, premium_emoji
+from bot.utils.i18n import tr
+from bot.utils.premium_emoji import category_premium_emoji, premium_emoji
 
 from .cryptobot_client import CryptoBotApiError, CryptoBotClient
 
@@ -75,7 +76,7 @@ class CryptoBotPaymentService:
     async def create_deposit_invoice(self, tg_user_id: int, amount_cents: int) -> dict[str, Any]:
         user = await self.repo.get_user_by_tg_id(tg_user_id)
         if not user:
-            raise ValueError("Пользователь не найден")
+            raise ValueError(tr("ru", "user_not_found"))
         payment = await self.repo.create_crypto_payment(
             user_id=user["id"],
             amount_cents=amount_cents,
@@ -88,7 +89,7 @@ class CryptoBotPaymentService:
     async def create_product_invoice(self, tg_user_id: int, product_id: int) -> dict[str, Any]:
         user = await self.repo.get_user_by_tg_id(tg_user_id)
         if not user:
-            raise ValueError("Пользователь не найден")
+            raise ValueError(tr("ru", "user_not_found"))
         payment = await self.repo.create_crypto_payment(
             user_id=user["id"],
             amount_cents=0,
@@ -102,7 +103,7 @@ class CryptoBotPaymentService:
     async def sync_payment_for_user(self, tg_user_id: int, payment_id: int) -> dict[str, Any]:
         payment = await self.repo.get_user_payment_by_id(tg_user_id, payment_id)
         if not payment:
-            raise ValueError("Платёж не найден")
+            raise ValueError(tr("ru", "payment_not_found"))
         if payment["status"] == "completed":
             return payment
         provider_invoice_id = payment.get("provider_invoice_id")
@@ -111,7 +112,7 @@ class CryptoBotPaymentService:
         try:
             invoice = await self.client.get_invoice(invoice_id=int(provider_invoice_id))
         except Exception as exc:
-            raise ValueError(self._public_error_message(exc)) from exc
+            raise ValueError(self._public_error_message(exc, payment.get("language_code"))) from exc
         result = await self.repo.apply_crypto_invoice(invoice)
         await self._notify_on_state_change(result)
         refreshed = await self.repo.get_user_payment_by_id(tg_user_id, payment_id)
@@ -191,12 +192,12 @@ class CryptoBotPaymentService:
 
     async def _create_and_attach_invoice(self, payment: dict[str, Any], *, user: dict[str, Any]) -> dict[str, Any]:
         if not self.is_enabled():
-            raise ValueError("Crypto Pay не настроен")
+            raise ValueError(tr(user.get("language_code"), "cryptopay_not_configured"))
         payload = {
             "currency_type": "fiat",
             "fiat": self.config.cryptopay_invoice_currency,
             "amount": self.client.cents_to_amount(payment["amount_cents"]),
-            "description": await self._build_description(payment),
+            "description": await self._build_description(payment, user.get("language_code")),
             "payload": json.dumps(
                 {
                     "payment_db_id": payment["id"],
@@ -214,7 +215,7 @@ class CryptoBotPaymentService:
         }
         if self.config.cryptopay_accepted_assets:
             payload["accepted_assets"] = ",".join(self.config.cryptopay_accepted_assets)
-        hidden_message = await self._build_hidden_message(payment)
+        hidden_message = await self._build_hidden_message(payment, user.get("language_code"))
         if hidden_message:
             payload["hidden_message"] = hidden_message
         success_url = self.build_success_url(payment["id"])
@@ -225,21 +226,23 @@ class CryptoBotPaymentService:
             invoice = await self.client.create_invoice(payload)
         except Exception as exc:
             await self.repo.mark_payment_failed(payment["id"], str(exc), release_reservation=True)
-            raise ValueError(self._public_error_message(exc)) from exc
+            raise ValueError(self._public_error_message(exc, user.get("language_code"))) from exc
         updated = await self.repo.attach_crypto_invoice(payment["id"], invoice)
         return updated
 
-    async def _build_description(self, payment: dict[str, Any]) -> str:
+    async def _build_description(self, payment: dict[str, Any], language_code: str | None) -> str:
+        lang = language_code
         if payment["purpose"] == "deposit":
-            return "Пополнение баланса Telegram-магазина"
+            return tr(lang, "crypto_deposit_description")
         product = await self.repo.get_product(payment["product_id"])
-        product_name = product["title"] if product else "Товар магазина"
-        return f"Оплата товара: {product_name}"
+        product_name = product["title"] if product else tr(lang, "shop_product_fallback")
+        return tr(lang, "crypto_product_description", product_name=product_name)
 
-    async def _build_hidden_message(self, payment: dict[str, Any]) -> str | None:
+    async def _build_hidden_message(self, payment: dict[str, Any], language_code: str | None) -> str | None:
+        lang = language_code
         if payment["purpose"] == "deposit":
-            return "После оплаты вернитесь в бота: баланс пополнится автоматически."
-        return "После оплаты бот автоматически выдаст товар и сохранит покупку в истории."
+            return tr(lang, "crypto_deposit_hidden_message")
+        return tr(lang, "crypto_product_hidden_message")
 
     async def _notify_on_state_change(self, result: dict[str, Any]) -> None:
         action = result.get("action")
@@ -249,48 +252,54 @@ class CryptoBotPaymentService:
         user = result.get("user") or {}
         if not user.get("tg_id"):
             return
+        lang = user.get("language_code")
         if action == "paid_unfulfilled":
             await self.bot.send_message(
                 user["tg_id"],
-                (
-                    f"{premium_emoji('important')} Платёж подтверждён, но автоматическая выдача не завершилась.\n\n"
-                    "Мы уже зафиксировали оплату и уведомили администратора. "
-                    "Напишите в поддержку, указав ID платежа: "
-                    f"<code>{payment.get('id', '—')}</code>"
+                tr(
+                    lang,
+                    "payment_fulfillment_issue",
+                    important_emoji=premium_emoji("important"),
+                    payment_id=payment.get("id", "—"),
                 ),
             )
             return
         if payment.get("purpose") == "deposit":
-            text = (
-                f"<b>{premium_emoji('balance')} Баланс пополнен</b>\n\n"
-                f"Сумма: {format_money(payment['amount_cents'])}\n"
-                f"Текущий баланс: {format_money(user['balance_cents'])}"
+            text = tr(
+                lang,
+                "balance_topped_up",
+                balance_emoji=premium_emoji("balance"),
+                amount=format_money(payment["amount_cents"]),
+                balance=format_money(user["balance_cents"]),
             )
             await self.bot.send_message(user["tg_id"], text)
             return
         order = result.get("order") or {}
-        icon = premium_emoji(category_emoji_name(order.get("category_slug")))
-        text = (
-            f"<b>{premium_emoji('order')} Оплата подтверждена</b>\n\n"
-            f"{icon} Товар: {html.quote(order.get('product_title', 'Товар'))}\n"
-            f"{premium_emoji('price')} Стоимость: {format_money(order.get('amount_cents', 0))}\n"
-            f"{icon} Ключ:\n<code>{html.quote(order.get('key_value', '—'))}</code>\n\n"
-            "Покупка сохранена в разделе «Мои покупки»."
+        icon = category_premium_emoji(order)
+        text = tr(
+            lang,
+            "payment_success_notified",
+            order_emoji=premium_emoji("order"),
+            category_emoji=icon,
+            product_title=html.quote(order.get("product_title", tr(lang, "shop_product_fallback"))),
+            price_emoji=premium_emoji("price"),
+            amount=format_money(order.get("amount_cents", 0)),
+            key_value=html.quote(order.get("key_value", "—")),
         )
         await self.bot.send_message(user["tg_id"], text)
 
     @staticmethod
-    def _public_error_message(exc: Exception) -> str:
+    def _public_error_message(exc: Exception, language_code: str | None = "ru") -> str:
         if isinstance(exc, (ClientConnectorCertificateError, ssl.SSLCertVerificationError)):
-            return "Не удалось установить защищенное соединение с Crypto Pay. Попробуйте еще раз через минуту."
+            return tr(language_code, "secure_connection_error")
         if isinstance(exc, (ClientError, TimeoutError)):
-            return "Платежный шлюз временно недоступен. Попробуйте еще раз чуть позже."
+            return tr(language_code, "gateway_unavailable")
         if isinstance(exc, CryptoBotApiError):
             message = str(exc)
             if len(message) > 180:
-                return "Crypto Pay вернул ошибку при создании счета. Проверьте настройки приложения и попробуйте снова."
+                return tr(language_code, "invoice_create_failed")
             return message
         message = str(exc).strip()
         if not message or len(message) > 180:
-            return "Не удалось создать счет. Попробуйте еще раз позже."
+            return tr(language_code, "invoice_create_failed")
         return message

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 PREMIUM_EMOJI: dict[str, tuple[str, str]] = {
     "greeting": ("5438496463044752972", "👋"),
     "welcome": ("5258203794772085854", "💎"),
@@ -43,6 +46,10 @@ def premium_emoji(name: str) -> str:
     return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
 
+def premium_emoji_by_id(emoji_id: str, fallback: str) -> str:
+    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+
+
 def premium_button_icon(name: str) -> str:
     return PREMIUM_EMOJI[name][0]
 
@@ -51,3 +58,42 @@ def category_emoji_name(category_slug: str | None) -> str:
     if category_slug in {"claude", "chatgpt", "grok"}:
         return category_slug
     return "stock"
+
+
+def _category_fallback(category_slug: str | None) -> tuple[str, str]:
+    return PREMIUM_EMOJI[category_emoji_name(category_slug)]
+
+
+def _category_custom_emoji_id(category: Mapping[str, Any] | None) -> str | None:
+    if not category:
+        return None
+    raw_value = category.get("premium_emoji_id") or category.get("category_premium_emoji_id")
+    if raw_value is None:
+        return None
+    emoji_id = str(raw_value).strip()
+    return emoji_id or None
+
+
+def _category_slug(category: Mapping[str, Any] | None) -> str | None:
+    if not category:
+        return None
+    raw_value = category.get("slug") or category.get("category_slug")
+    if raw_value is None:
+        return None
+    slug = str(raw_value).strip()
+    return slug or None
+
+
+def category_premium_button_icon(category: Mapping[str, Any] | None) -> str:
+    custom_emoji_id = _category_custom_emoji_id(category)
+    if custom_emoji_id:
+        return custom_emoji_id
+    return _category_fallback(_category_slug(category))[0]
+
+
+def category_premium_emoji(category: Mapping[str, Any] | None) -> str:
+    custom_emoji_id = _category_custom_emoji_id(category)
+    _, fallback = _category_fallback(_category_slug(category))
+    if custom_emoji_id:
+        return premium_emoji_by_id(custom_emoji_id, fallback)
+    return premium_emoji(category_emoji_name(_category_slug(category)))

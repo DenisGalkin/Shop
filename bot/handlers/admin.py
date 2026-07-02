@@ -20,8 +20,9 @@ from bot.keyboards.common import (
 )
 from bot.storage.repository import ShopRepository
 from bot.utils.formatting import format_date, format_money, parse_money_to_cents
+from bot.utils.i18n import tr
 from bot.utils.messages import render_message
-from bot.utils.premium_emoji import premium_emoji
+from bot.utils.premium_emoji import category_premium_emoji, premium_emoji
 
 router = Router()
 
@@ -29,11 +30,13 @@ router = Router()
 class AdminStates(StatesGroup):
     add_category_title = State()
     add_category_description = State()
+    add_category_emoji = State()
     add_product_title = State()
     add_product_price = State()
     add_product_description = State()
     add_product_important = State()
     add_product_warranty = State()
+    edit_category_emoji = State()
     edit_product_field = State()
     add_stock = State()
     find_user = State()
@@ -75,12 +78,38 @@ async def _render_admin_category_detail(
     category = await repo.get_category(category_id)
     if not category:
         raise ValueError("Category not found")
+    current_emoji_id = (category.get("premium_emoji_id") or "").strip()
     text = (
         f"<b>Категория: {html.quote(category['title'])}</b>\n\n"
+        f"Emoji: {category_premium_emoji(category)}\n"
+        f"Emoji ID: <code>{html.quote(current_emoji_id or '—')}</code>\n"
         f"Описание: {html.quote(category['description'] or '—')}\n"
         f"Статус: {'активна' if category['is_active'] else 'отключена'}"
     )
     await render_message(target, text, reply_markup=admin_category_detail_kb(category_id, bool(category["is_active"])))
+
+
+def _extract_custom_emoji_id(message: Message) -> str | None:
+    entities = [*(message.entities or ()), *(message.caption_entities or ())]
+    for entity in entities:
+        entity_type = getattr(entity, "type", None)
+        normalized_type = getattr(entity_type, "value", entity_type)
+        custom_emoji_id = getattr(entity, "custom_emoji_id", None)
+        if normalized_type == "custom_emoji" and custom_emoji_id:
+            return str(custom_emoji_id)
+    return None
+
+
+def _parse_category_emoji_input(message: Message) -> str | None:
+    custom_emoji_id = _extract_custom_emoji_id(message)
+    if custom_emoji_id:
+        return custom_emoji_id
+    text = (message.text or "").strip()
+    if text in {"", "-", "—", "none", "None", "нет", "Нет"}:
+        return None
+    if text.isdigit():
+        return text
+    raise ValueError("Отправьте один premium emoji, его ID цифрами или '-' чтобы очистить поле.")
 
 
 @router.message(Command("admin"))
@@ -182,8 +211,27 @@ async def admin_category_add_description(
 ) -> None:
     if not await _ensure_admin_access(message, config):
         return
+    await state.update_data(category_description=message.text.strip())
+    await state.set_state(AdminStates.add_category_emoji)
+    await message.answer(
+        "Теперь отправьте premium emoji для категории одним сообщением.\n"
+        "Можно также отправить ID цифрами или '-' чтобы пропустить."
+    )
+
+
+@router.message(AdminStates.add_category_emoji)
+async def admin_category_add_emoji(
+    message: Message, state: FSMContext, repo: ShopRepository, config: Config
+) -> None:
+    if not await _ensure_admin_access(message, config):
+        return
+    try:
+        premium_emoji_id = _parse_category_emoji_input(message)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
     data = await state.get_data()
-    await repo.create_category(data["category_title"], message.text.strip())
+    await repo.create_category(data["category_title"], data["category_description"], premium_emoji_id)
     await state.clear()
     await message.answer("Категория добавлена.")
     await _render_admin_home(message, repo)
@@ -197,6 +245,57 @@ async def admin_category_toggle(callback: CallbackQuery, repo: ShopRepository, c
     await repo.toggle_category(category_id)
     await callback.answer("Статус категории обновлён")
     await _render_admin_category_detail(callback, repo, category_id)
+
+
+@router.callback_query(F.data.startswith("admin:category:emoji:"))
+async def admin_category_emoji_start(callback: CallbackQuery, state: FSMContext, repo: ShopRepository, config: Config) -> None:
+    if not await _ensure_admin_access(callback, config):
+        return
+    category_id = int(callback.data.split(":")[3])
+    category = await repo.get_category(category_id)
+    if not category:
+        await callback.answer("Категория не найдена", show_alert=True)
+        return
+    await state.update_data(edit_category_id=category_id)
+    await state.set_state(AdminStates.edit_category_emoji)
+    await render_message(
+        callback,
+        (
+            f"Отправьте новый premium emoji для категории <b>{html.quote(category['title'])}</b>.\n\n"
+            "Я сам определю его ID и сохраню.\n"
+            "Можно также отправить ID цифрами или '-' чтобы очистить поле."
+        ),
+    )
+
+
+@router.message(AdminStates.edit_category_emoji)
+async def admin_category_emoji_save(
+    message: Message, state: FSMContext, repo: ShopRepository, config: Config
+) -> None:
+    if not await _ensure_admin_access(message, config):
+        return
+    try:
+        premium_emoji_id = _parse_category_emoji_input(message)
+    except ValueError as exc:
+        await message.answer(str(exc))
+        return
+    data = await state.get_data()
+    category_id = int(data["edit_category_id"])
+    category = await repo.get_category(category_id)
+    if not category:
+        await state.clear()
+        await message.answer("Категория не найдена.")
+        return
+    await repo.update_category(
+        category_id,
+        category["title"],
+        category["description"] or "",
+        int(category["sort_order"]),
+        premium_emoji_id,
+    )
+    await state.clear()
+    await message.answer("Emoji категории обновлён.")
+    await _render_admin_category_detail(message, repo, category_id)
 
 
 @router.callback_query(F.data.startswith("admin:product:add:"))
@@ -410,15 +509,17 @@ async def admin_stock_add_finish(
         product = await repo.get_product(product_id)
         if product:
             recipients = await repo.get_stock_notification_recipients(product_id)
-            notification_text = (
-                f"{premium_emoji('stock')} Товар {html.quote(product['title'])} снова в наличии!"
-            )
             for recipient in recipients:
                 try:
                     await bot.send_message(
                         recipient["tg_id"],
-                        notification_text,
-                        reply_markup=restock_notification_kb(product_id),
+                        tr(
+                            recipient.get("language_code"),
+                            "restock_notification_text",
+                            stock_emoji=premium_emoji("stock"),
+                            product_title=html.quote(product["title"]),
+                        ),
+                        reply_markup=restock_notification_kb(product_id, recipient.get("language_code", "ru")),
                     )
                 except Exception:
                     continue

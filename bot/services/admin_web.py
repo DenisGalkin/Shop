@@ -158,6 +158,7 @@ def _serialize_category(category: dict[str, Any]) -> dict[str, Any]:
         "slug": category["slug"],
         "title": category["title"],
         "description": category["description"] or "",
+        "premium_emoji_id": category.get("premium_emoji_id") or "",
         "sort_order": category["sort_order"],
         "is_active": bool(category["is_active"]),
         "products_count": category.get("products_count", 0),
@@ -280,9 +281,10 @@ async def admin_categories(request: web.Request) -> web.Response:
     if not title:
         return _json_error("Название категории обязательно")
     description = str(payload.get("description", "")).strip()
+    premium_emoji_id = str(payload.get("premium_emoji_id", "")).strip() or None
     sort_order = int(payload.get("sort_order") or 0)
-    category_id = await repo.create_category(title, description)
-    await repo.update_category(category_id, title, description, sort_order)
+    category_id = await repo.create_category(title, description, premium_emoji_id)
+    await repo.update_category(category_id, title, description, sort_order, premium_emoji_id)
     category = await repo.get_category(category_id)
     return web.json_response({"ok": True, "item": _serialize_category(category or {})})
 
@@ -299,8 +301,9 @@ async def admin_category_update(request: web.Request) -> web.Response:
     if not title:
         return _json_error("Название категории обязательно")
     description = str(payload.get("description", category["description"] or "")).strip()
+    premium_emoji_id = str(payload.get("premium_emoji_id", category.get("premium_emoji_id") or "")).strip() or None
     sort_order = int(payload.get("sort_order", category["sort_order"]) or 0)
-    await repo.update_category(category_id, title, description, sort_order)
+    await repo.update_category(category_id, title, description, sort_order, premium_emoji_id)
     updated = await repo.get_category(category_id)
     return web.json_response({"ok": True, "item": _serialize_category(updated or {})})
 
