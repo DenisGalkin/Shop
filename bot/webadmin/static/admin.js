@@ -764,6 +764,46 @@ function getPaymentStatusMeta(payment) {
   return map[payment.status] || { label: payment.status || "—", tone: "neutral" };
 }
 
+function renderOrderRow(order) {
+  const status = getStatusMeta(order.status);
+  return `
+    <article class="list-row">
+      <div>
+        <strong>#${order.id} · ${escapeHtml(order.product_title || "Товар без названия")}</strong>
+        <small>${escapeHtml(order.created_label || "—")} · ${escapeHtml(order.payment_method || "Не указан")}</small>
+      </div>
+      <div>
+        <strong>${escapeHtml(order.amount_label || "—")}</strong>
+        <small>${escapeHtml(order.buyer_name || "Без имени")} · ID ${escapeHtml(order.buyer_tg_id || "—")}</small>
+      </div>
+      <div class="stock-actions">
+        <span class="chip ${status.tone}">${escapeHtml(status.label)}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderPaymentRow(payment) {
+  const status = getPaymentStatusMeta(payment);
+  const purposeLabel = payment.product_title || payment.purpose || "Платеж";
+  return `
+    <article class="list-row">
+      <div>
+        <strong>#${payment.id} · ${escapeHtml(formatPaymentProvider(payment.payment_type))}</strong>
+        <small>${escapeHtml(payment.created_label || "—")} · ${escapeHtml(purposeLabel)}</small>
+      </div>
+      <div>
+        <strong>${escapeHtml(payment.amount_label || "—")}</strong>
+        <small>${escapeHtml(payment.buyer_name || "Без имени")} · ID ${escapeHtml(payment.buyer_tg_id || "—")}</small>
+      </div>
+      <div class="stock-actions">
+        <span class="chip ${status.tone}">${escapeHtml(status.label)}</span>
+        <span>${escapeHtml(payment.provider_status || "—")}</span>
+      </div>
+    </article>
+  `;
+}
+
 function renderDashboardAlert(message) {
   return `
     <div class="dashboard-alert">
