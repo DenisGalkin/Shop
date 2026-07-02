@@ -359,6 +359,7 @@ async def admin_product_add_warranty(
     product_id = await repo.create_product(
         category_id=data["product_category_id"],
         title=data["product_title"],
+        internal_name=data["product_title"],
         price_cents=data["product_price_cents"],
         description=data["product_description"],
         important_info=data["product_important"],
@@ -510,6 +511,7 @@ async def admin_stock_add_finish(
         if product:
             recipients = await repo.get_stock_notification_recipients(product_id)
             for recipient in recipients:
+                localized_product = repo.localize_product(product, recipient.get("language_code"))
                 try:
                     await bot.send_message(
                         recipient["tg_id"],
@@ -517,7 +519,7 @@ async def admin_stock_add_finish(
                             recipient.get("language_code"),
                             "restock_notification_text",
                             stock_emoji=premium_emoji("stock"),
-                            product_title=html.quote(product["title"]),
+                            product_title=html.quote(localized_product["title"] if localized_product else product["title"]),
                         ),
                         reply_markup=restock_notification_kb(product_id, recipient.get("language_code", "ru")),
                     )

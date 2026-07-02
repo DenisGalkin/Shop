@@ -1,3 +1,25 @@
+const PRODUCT_LOCALES = [
+  { code: "en", label: "EN" },
+  { code: "ru", label: "RU" },
+  { code: "uk", label: "UA" },
+];
+
+function createEmptyLocalizedFields() {
+  return { en: "", ru: "", uk: "" };
+}
+
+function normalizeLocalizedFields(values = {}, fallback = "") {
+  const result = createEmptyLocalizedFields();
+  PRODUCT_LOCALES.forEach(({ code }) => {
+    const value = String(values?.[code] ?? "").trim();
+    if (value) result[code] = value;
+  });
+  if (fallback && !result.ru) {
+    result.ru = String(fallback).trim();
+  }
+  return result;
+}
+
 const createEmptyCategoryForm = () => ({
   id: "",
   title: "",
@@ -9,13 +31,14 @@ const createEmptyCategoryForm = () => ({
 const createEmptyProductForm = (categories = []) => ({
   id: "",
   category_id: categories[0] ? String(categories[0].id) : "",
-  title: "",
-  internal_name: "",
+  active_locale: "ru",
+  title_i18n: createEmptyLocalizedFields(),
+  internal_name_i18n: createEmptyLocalizedFields(),
   price: "",
   warranty_label: "",
   sort_order: "0",
-  description: "",
-  important_info: "",
+  description_i18n: createEmptyLocalizedFields(),
+  important_info_i18n: createEmptyLocalizedFields(),
 });
 
 const createEmptyStockForm = (productId = "") => ({
@@ -302,6 +325,11 @@ function resetProductForm() {
   state.forms.product = createEmptyProductForm(state.categories);
 }
 
+function setProductLocaleTab(locale) {
+  state.forms.product.active_locale = locale;
+  render();
+}
+
 function resetStockForm(productId = "") {
   state.forms.stock = createEmptyStockForm(productId);
 }
@@ -378,13 +406,14 @@ function editProduct(productId) {
   state.forms.product = {
     id: String(product.id),
     category_id: String(product.category_id),
-    title: product.title,
-    internal_name: product.internal_name,
+    active_locale: state.forms.product.active_locale || "ru",
+    title_i18n: normalizeLocalizedFields(product.title_i18n, product.title),
+    internal_name_i18n: normalizeLocalizedFields(product.internal_name_i18n, product.internal_name),
     price: (product.price_cents / 100).toFixed(2),
     warranty_label: product.warranty_label,
     sort_order: String(product.sort_order),
-    description: product.description,
-    important_info: product.important_info,
+    description_i18n: normalizeLocalizedFields(product.description_i18n, product.description),
+    important_info_i18n: normalizeLocalizedFields(product.important_info_i18n, product.important_info),
   };
   openModal("product", { mode: "edit", entityId: productId });
 }
@@ -394,13 +423,13 @@ async function submitProduct(event) {
   const form = new FormData(event.currentTarget);
   const payload = {
     category_id: form.get("category_id"),
-    title: form.get("title"),
-    internal_name: form.get("internal_name"),
     price: form.get("price"),
     warranty_label: form.get("warranty_label"),
     sort_order: form.get("sort_order"),
-    description: form.get("description"),
-    important_info: form.get("important_info"),
+    title_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`title_i18n_${code}`) || "").trim()])),
+    internal_name_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`internal_name_i18n_${code}`) || "").trim()])),
+    description_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`description_i18n_${code}`) || "").trim()])),
+    important_info_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`important_info_i18n_${code}`) || "").trim()])),
   };
   try {
     if (state.forms.product.id) {
@@ -467,9 +496,16 @@ function openStockDrawer(productId = "") {
   }
 }
 
+function syncStockDraftMeta() {
+  const counter = document.getElementById("stock-keys-count");
+  if (counter) {
+    counter.textContent = `${countKeys(state.forms.stock.keys)} найдено`;
+  }
+}
+
 function updateStockDraft(value) {
   state.forms.stock.keys = value;
-  render();
+  syncStockDraftMeta();
 }
 
 function countKeys(value) {
@@ -1592,6 +1628,49 @@ function renderModal() {
     `;
   }
   if (modal.type === "product") {
+    const activeLocale = state.forms.product.active_locale || "ru";
+    const localizationTabs = `
+      <div class="locale-switcher" role="tablist" aria-label="Локализация товара">
+        ${PRODUCT_LOCALES.map(
+          ({ code, label }) => `
+            <button
+              class="${activeLocale === code ? "active" : ""}"
+              type="button"
+              role="tab"
+              aria-selected="${activeLocale === code ? "true" : "false"}"
+              onclick="setProductLocaleTab('${code}')"
+            >${label}</button>
+          `
+        ).join("")}
+      </div>
+    `;
+    const localizationPanels = PRODUCT_LOCALES.map(({ code, label }) => {
+      const hidden = activeLocale !== code;
+      return `
+        <section class="locale-panel ${hidden ? "hidden" : ""}" data-locale-panel="${code}">
+          <div class="locale-panel-head">
+            <strong>${label}</strong>
+            <span>${code === "en" ? "English" : code === "ru" ? "Русский" : "Українська"}</span>
+          </div>
+          <div class="field full">
+            <label>Название ${label}</label>
+            <input name="title_i18n_${code}" value="${escapeHtml(state.forms.product.title_i18n?.[code] || "")}" ${code === "ru" ? "required" : ""} />
+          </div>
+          <div class="field full">
+            <label>Внутреннее название ${label}</label>
+            <input name="internal_name_i18n_${code}" value="${escapeHtml(state.forms.product.internal_name_i18n?.[code] || "")}" />
+          </div>
+          <div class="field full">
+            <label>Описание ${label}</label>
+            <textarea name="description_i18n_${code}" rows="4">${escapeHtml(state.forms.product.description_i18n?.[code] || "")}</textarea>
+          </div>
+          <div class="field full">
+            <label>Важная информация ${label}</label>
+            <textarea name="important_info_i18n_${code}" rows="4">${escapeHtml(state.forms.product.important_info_i18n?.[code] || "")}</textarea>
+          </div>
+        </section>
+      `;
+    }).join("");
     return `
       <div class="modal-backdrop" data-close-modal="true">
         <aside class="drawer wide" role="dialog" aria-modal="true">
@@ -1615,14 +1694,6 @@ function renderModal() {
               <label>Порядок</label>
               <input name="sort_order" value="${escapeHtml(state.forms.product.sort_order)}" />
             </div>
-            <div class="field full">
-              <label>Название</label>
-              <input name="title" value="${escapeHtml(state.forms.product.title)}" required />
-            </div>
-            <div class="field full">
-              <label>Внутреннее название</label>
-              <input name="internal_name" value="${escapeHtml(state.forms.product.internal_name)}" />
-            </div>
             <div class="field">
               <label>Цена в USD</label>
               <input name="price" value="${escapeHtml(state.forms.product.price)}" placeholder="80.00" required />
@@ -1632,12 +1703,10 @@ function renderModal() {
               <input name="warranty_label" value="${escapeHtml(state.forms.product.warranty_label)}" />
             </div>
             <div class="field full">
-              <label>Описание</label>
-              <textarea name="description" rows="4">${escapeHtml(state.forms.product.description)}</textarea>
-            </div>
-            <div class="field full">
-              <label>Важная информация</label>
-              <textarea name="important_info" rows="4">${escapeHtml(state.forms.product.important_info)}</textarea>
+              <label>Локализация товара</label>
+              <p class="field-note">Заполните RU, EN и UA. Пользователь увидит язык своего интерфейса, а если перевод пустой, сработает fallback.</p>
+              ${localizationTabs}
+              ${localizationPanels}
             </div>
             <div class="field full form-actions">
               <button class="secondary-button" type="button" data-close-modal="true">Отмена</button>
@@ -1672,24 +1741,34 @@ function renderModal() {
           </div>
           ${
             selectedProduct
-              ? `<div class="inline-note">Текущий остаток: <strong>${selectedProduct.stock_count}</strong> · Продано: <strong>${selectedProduct.sold_count}</strong></div>`
+              ? `
+                <div class="stock-summary-grid full">
+                  <div class="stock-summary-card">
+                    <span>Текущий остаток</span>
+                    <strong>${selectedProduct.stock_count}</strong>
+                  </div>
+                  <div class="stock-summary-card">
+                    <span>Продано</span>
+                    <strong>${selectedProduct.sold_count}</strong>
+                  </div>
+                </div>
+              `
               : ""
           }
-          <div class="field full">
-            <label>Загруженные ключи</label>
-            ${renderStockItemsPanel()}
-          </div>
           <div class="field full">
             <label>Новые ключи</label>
             <textarea id="stock-keys-textarea" name="keys" rows="10" placeholder="По одному ключу на строку">${escapeHtml(state.forms.stock.keys)}</textarea>
           </div>
-          <div class="drawer-footer-meta">
-            <span class="muted">Подсказка: по одному ключу на строку</span>
-            <span class="chip">${keyCount} найдено</span>
-          </div>
-          <div class="field full form-actions">
-            <button class="secondary-button" type="button" data-close-modal="true">Отмена</button>
+          <div class="field full stock-draft-actions">
             <button class="primary-button" type="submit">Добавить ключи</button>
+            <div class="drawer-footer-meta">
+              <span class="muted">Подсказка: по одному ключу на строку</span>
+              <span class="chip" id="stock-keys-count">${keyCount} найдено</span>
+            </div>
+          </div>
+          <div class="field full">
+            <label>Загруженные ключи</label>
+            ${renderStockItemsPanel()}
           </div>
         </form>
       </aside>

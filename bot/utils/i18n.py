@@ -598,6 +598,16 @@ def language_name(language_code: str | None, ui_language_code: str | None = None
     return tr(target_ui_lang, mapping[lang])
 
 
+def pick_localized_text(localized_values: dict[str, str] | None, language_code: str | None, fallback: str = "") -> str:
+    values = localized_values or {}
+    lang = normalize_language_code(language_code)
+    for candidate in (lang, "ru", "en", "uk"):
+        value = str(values.get(candidate, "")).strip()
+        if value:
+            return value
+    return str(fallback or "").strip()
+
+
 def translate_error(language_code: str | None, raw_message: str) -> str:
     key = ERROR_TRANSLATION_KEYS.get(raw_message.strip())
     if key:

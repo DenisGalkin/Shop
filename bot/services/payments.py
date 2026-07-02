@@ -235,7 +235,8 @@ class CryptoBotPaymentService:
         if payment["purpose"] == "deposit":
             return tr(lang, "crypto_deposit_description")
         product = await self.repo.get_product(payment["product_id"])
-        product_name = product["title"] if product else tr(lang, "shop_product_fallback")
+        localized_product = self.repo.localize_product(product, lang) if product else None
+        product_name = localized_product["title"] if localized_product else tr(lang, "shop_product_fallback")
         return tr(lang, "crypto_product_description", product_name=product_name)
 
     async def _build_hidden_message(self, payment: dict[str, Any], language_code: str | None) -> str | None:
@@ -281,7 +282,7 @@ class CryptoBotPaymentService:
             "payment_success_notified",
             order_emoji=premium_emoji("order"),
             category_emoji=icon,
-            product_title=html.quote(order.get("product_title", tr(lang, "shop_product_fallback"))),
+            product_title=html.quote(self.repo.localize_product_title(order, lang) or tr(lang, "shop_product_fallback")),
             price_emoji=premium_emoji("price"),
             amount=format_money(order.get("amount_cents", 0)),
             key_value=html.quote(order.get("key_value", "—")),

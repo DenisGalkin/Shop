@@ -13,6 +13,7 @@ from aiohttp import web
 from bot.config import Config
 from bot.storage.repository import ShopRepository, utcnow
 from bot.utils.formatting import format_date, format_money, parse_money_to_cents
+from bot.utils.i18n import SUPPORTED_LANGUAGES, normalize_language_code, pick_localized_text
 
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "webadmin" / "static"
@@ -29,11 +30,11 @@ def _html_shell() -> str:
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/assets/admin.css?v=4" />
+    <link rel="stylesheet" href="/admin/assets/admin.css?v=5" />
   </head>
   <body>
     <div id="app"></div>
-    <script src="/admin/assets/admin.js?v=4" defer></script>
+    <script src="/admin/assets/admin.js?v=5" defer></script>
   </body>
 </html>"""
 
@@ -187,9 +188,13 @@ def _serialize_product(product: dict[str, Any]) -> dict[str, Any]:
         "category_id": product["category_id"],
         "category_title": product["category_title"],
         "title": product["title"],
+        "title_i18n": product.get("title_i18n") or {},
         "internal_name": product["internal_name"],
+        "internal_name_i18n": product.get("internal_name_i18n") or {},
         "description": product["description"],
+        "description_i18n": product.get("description_i18n") or {},
         "important_info": product["important_info"],
+        "important_info_i18n": product.get("important_info_i18n") or {},
         "price_cents": product["price_cents"],
         "price_label": format_money(product["price_cents"]),
         "warranty_label": product["warranty_label"],
@@ -198,6 +203,37 @@ def _serialize_product(product: dict[str, Any]) -> dict[str, Any]:
         "sold_count": product.get("sold_count", 0),
         "is_active": bool(product["is_active"]),
     }
+
+
+def _parse_localized_field(
+    payload: dict[str, Any],
+    field_name: str,
+    *,
+    fallback: str = "",
+    existing: dict[str, str] | None = None,
+) -> dict[str, str]:
+    raw_value = payload.get(f"{field_name}_i18n")
+    result: dict[str, str] = {}
+    if isinstance(raw_value, dict):
+        for language_code, text in raw_value.items():
+            lang = normalize_language_code(str(language_code))
+            value = str(text or "").strip()
+            if value:
+                result[lang] = value
+    elif existing:
+        for language_code, text in existing.items():
+            lang = normalize_language_code(str(language_code))
+            value = str(text or "").strip()
+            if value:
+                result[lang] = value
+    plain_value = str(payload.get(field_name, fallback)).strip()
+    if plain_value and not result.get("ru"):
+        result["ru"] = plain_value
+    return {lang: result.get(lang, "") for lang in SUPPORTED_LANGUAGES if result.get(lang, "").strip()}
+
+
+def _primary_localized_value(values: dict[str, str], fallback: str = "") -> str:
+    return pick_localized_text(values, "ru", fallback)
 
 
 def _serialize_stock_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -372,29 +408,42 @@ async def admin_products(request: web.Request) -> web.Response:
         categories = [*_map(_serialize_category, await repo.list_admin_categories())]
         return web.json_response({"ok": True, "items": products, "categories": categories})
     payload = await _get_json(request)
-    title = str(payload.get("title", "")).strip()
-    internal_name = str(payload.get("internal_name", "")).strip() or title
+    title_i18n = _parse_localized_field(payload, "title")
+    internal_name_i18n = _parse_localized_field(payload, "internal_name")
+    description_i18n = _parse_localized_field(payload, "description")
+    important_info_i18n = _parse_localized_field(payload, "important_info")
+    title = _primary_localized_value(title_i18n)
+    internal_name = _primary_localized_value(internal_name_i18n, title) or title
     category_id = int(payload.get("category_id") or 0)
     if not title or not category_id:
         return _json_error("Заполните название и категорию")
     product_id = await repo.create_product(
         category_id=category_id,
         title=title,
+        internal_name=internal_name,
         price_cents=parse_money_to_cents(str(payload.get("price", "0"))),
-        description=str(payload.get("description", "")).strip(),
-        important_info=str(payload.get("important_info", "")).strip(),
+        description=_primary_localized_value(description_i18n),
+        important_info=_primary_localized_value(important_info_i18n),
         warranty_label=str(payload.get("warranty_label", "")).strip(),
+        title_i18n=title_i18n,
+        internal_name_i18n=internal_name_i18n,
+        description_i18n=description_i18n,
+        important_info_i18n=important_info_i18n,
     )
     await repo.update_product(
         product_id,
         category_id=category_id,
         title=title,
         internal_name=internal_name,
-        description=str(payload.get("description", "")).strip(),
-        important_info=str(payload.get("important_info", "")).strip(),
+        description=_primary_localized_value(description_i18n),
+        important_info=_primary_localized_value(important_info_i18n),
         price_cents=parse_money_to_cents(str(payload.get("price", "0"))),
         warranty_label=str(payload.get("warranty_label", "")).strip(),
         sort_order=int(payload.get("sort_order") or 0),
+        title_i18n=title_i18n,
+        internal_name_i18n=internal_name_i18n,
+        description_i18n=description_i18n,
+        important_info_i18n=important_info_i18n,
     )
     product = await repo.get_product(product_id)
     return web.json_response({"ok": True, "item": _serialize_product(product or {})})
@@ -408,16 +457,39 @@ async def admin_product_update(request: web.Request) -> web.Response:
     if not existing:
         return _json_error("Товар не найден", status=404)
     payload = await _get_json(request)
+    title_i18n = _parse_localized_field(payload, "title", fallback=existing["title"], existing=existing.get("title_i18n"))
+    internal_name_i18n = _parse_localized_field(
+        payload,
+        "internal_name",
+        fallback=existing["internal_name"],
+        existing=existing.get("internal_name_i18n"),
+    )
+    description_i18n = _parse_localized_field(
+        payload,
+        "description",
+        fallback=existing["description"],
+        existing=existing.get("description_i18n"),
+    )
+    important_info_i18n = _parse_localized_field(
+        payload,
+        "important_info",
+        fallback=existing["important_info"],
+        existing=existing.get("important_info_i18n"),
+    )
     await repo.update_product(
         product_id,
         category_id=int(payload.get("category_id", existing["category_id"])),
-        title=str(payload.get("title", existing["title"])).strip(),
-        internal_name=str(payload.get("internal_name", existing["internal_name"])).strip(),
-        description=str(payload.get("description", existing["description"])).strip(),
-        important_info=str(payload.get("important_info", existing["important_info"])).strip(),
+        title=_primary_localized_value(title_i18n, existing["title"]),
+        internal_name=_primary_localized_value(internal_name_i18n, existing["internal_name"]),
+        description=_primary_localized_value(description_i18n, existing["description"]),
+        important_info=_primary_localized_value(important_info_i18n, existing["important_info"]),
         price_cents=parse_money_to_cents(str(payload.get("price", existing["price_cents"] / 100))),
         warranty_label=str(payload.get("warranty_label", existing["warranty_label"])).strip(),
         sort_order=int(payload.get("sort_order", existing["sort_order"]) or 0),
+        title_i18n=title_i18n,
+        internal_name_i18n=internal_name_i18n,
+        description_i18n=description_i18n,
+        important_info_i18n=important_info_i18n,
     )
     updated = await repo.get_product(product_id)
     return web.json_response({"ok": True, "item": _serialize_product(updated or {})})

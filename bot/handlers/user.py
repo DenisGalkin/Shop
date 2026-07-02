@@ -190,7 +190,7 @@ async def catalog_category_handler(callback: CallbackQuery, repo: ShopRepository
     if not category:
         await callback.answer(tr(lang, "category_not_found"), show_alert=True)
         return
-    products = await repo.list_products(category_id)
+    products = [repo.localize_product(product, lang) for product in await repo.list_products(category_id)]
     text = tr(
         lang,
         "catalog_choose_product",
@@ -210,6 +210,7 @@ async def product_card_handler(callback: CallbackQuery, repo: ShopRepository) ->
     if not product:
         await callback.answer(tr(lang, "product_not_found"), show_alert=True)
         return
+    product = repo.localize_product(product, lang)
     notifications_enabled = bool(user and await repo.has_stock_notification(user["id"], product_id))
     text = tr(
         lang,
@@ -244,7 +245,8 @@ async def product_back_handler(callback: CallbackQuery, repo: ShopRepository) ->
     if not product:
         await callback.answer(tr(lang, "product_not_found"), show_alert=True)
         return
-    products = await repo.list_products(product["category_id"])
+    product = repo.localize_product(product, lang)
+    products = [repo.localize_product(item, lang) for item in await repo.list_products(product["category_id"])]
     await render_message(
         callback,
         tr(
@@ -267,6 +269,7 @@ async def buy_menu_handler(callback: CallbackQuery, repo: ShopRepository, config
     if not product or not user:
         await callback.answer(tr(lang, "data_not_found"), show_alert=True)
         return
+    product = repo.localize_product(product, lang)
     if product["stock_count"] <= 0:
         await callback.answer(tr(lang, "product_out_of_stock"), show_alert=True)
         await product_card_handler(callback, repo)
@@ -330,7 +333,7 @@ async def buy_balance_handler(callback: CallbackQuery, repo: ShopRepository) -> 
         order_emoji=premium_emoji("order"),
         order_id=order["id"],
         category_emoji=_category_emoji(order),
-        product_title=html.quote(order["product_title"]),
+        product_title=html.quote(repo.localize_product_title(order, lang)),
         price_emoji=premium_emoji("price"),
         amount=format_money(order["amount_cents"]),
         key_emoji=premium_emoji("key"),
@@ -352,6 +355,7 @@ async def buy_crypto_handler(
     if not product:
         await callback.answer(tr(lang, "product_not_found"), show_alert=True)
         return
+    product = repo.localize_product(product, lang)
     try:
         payment = await payment_service.create_product_invoice(callback.from_user.id, product_id)
     except ValueError as exc:
@@ -437,7 +441,7 @@ async def order_detail_handler(callback: CallbackQuery, repo: ShopRepository) ->
         order_id=order["id"],
         created_at=format_date(order["created_at"]),
         category_emoji=_category_emoji(order),
-        product_title=html.quote(order["product_title"]),
+        product_title=html.quote(repo.localize_product_title(order, lang)),
         price_emoji=premium_emoji("price"),
         amount=format_money(order["amount_cents"]),
         key_emoji=premium_emoji("key"),
@@ -554,7 +558,7 @@ async def payment_check_handler(
             order_emoji=premium_emoji("order"),
             order_id=order["id"],
             category_emoji=_category_emoji(order),
-            product_title=html.quote(order["product_title"]),
+            product_title=html.quote(repo.localize_product_title(order, lang)),
             price_emoji=premium_emoji("price"),
             amount=format_money(order["amount_cents"]),
             key_emoji=premium_emoji("key"),
