@@ -52,7 +52,7 @@ class Config:
 
     @property
     def lolz_enabled(self) -> bool:
-        return bool(self.lolz_merchant_id and self.lolz_api_token)
+        return bool(self.lolz_merchant_id and self.lolz_api_token and self.lolz_merchant_token)
 
     @property
     def admin_web_enabled(self) -> bool:
@@ -92,7 +92,11 @@ def load_config() -> Config:
     lolz_webhook_token = os.getenv("LOLZ_WEBHOOK_PATH_TOKEN", "").strip()
     if lolz_merchant_token and not lolz_webhook_token:
         lolz_webhook_token = sha256(lolz_merchant_token.encode("utf-8")).hexdigest()
-    webhook_secret = os.getenv("LOLZ_WEBHOOK_SECRET", "").strip() or lolz_merchant_token
+    webhook_secret = os.getenv("LOLZ_WEBHOOK_SECRET", "").strip()
+    if webhook_secret and lolz_merchant_token and webhook_secret != lolz_merchant_token:
+        raise RuntimeError("LOLZ_WEBHOOK_SECRET must match LOLZ_MERCHANT_TOKEN according to Lolzteam webhook docs")
+    if not webhook_secret:
+        webhook_secret = lolz_merchant_token
     admin_web_secret = os.getenv("ADMIN_WEB_SECRET", "").strip()
     if not admin_web_secret:
         admin_web_secret = base64.urlsafe_b64encode(sha256(bot_token.encode("utf-8")).digest()).decode("ascii")
@@ -133,6 +137,10 @@ def load_config() -> Config:
         admin_web_secret=admin_web_secret,
         admin_web_session_ttl_hours=int(os.getenv("ADMIN_WEB_SESSION_TTL_HOURS", "24")),
     )
+    if any((lolz_api_token, lolz_merchant_token, str(config.lolz_merchant_id or "").strip(), webhook_secret, lolz_webhook_token)) and not config.lolz_enabled:
+        raise RuntimeError(
+            "Lolzteam requires LOLZ_MERCHANT_ID, LOLZ_API_TOKEN, and LOLZ_MERCHANT_TOKEN to be configured together"
+        )
     if (config.cryptopay_enabled or config.lolz_enabled) and not config.public_base_url:
         raise RuntimeError("PUBLIC_BASE_URL is required when CryptoBot or Lolzteam payments are enabled")
     return config

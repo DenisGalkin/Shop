@@ -419,7 +419,7 @@ class LolzteamPaymentService(BasePaymentService):
         return f"{self.config.public_base_url}/payments/lolzteam/callback/{self.config.lolz_webhook_path_token}"
 
     def verify_webhook_secret(self, secret: str | None) -> bool:
-        expected = self.config.lolz_webhook_secret or self.config.lolz_merchant_token
+        expected = self.config.lolz_merchant_token or self.config.lolz_webhook_secret
         return bool(secret and expected and hmac.compare_digest(secret, expected))
 
     async def process_webhook(self, payload: dict[str, Any], *, secret: str | None) -> dict[str, Any]:
