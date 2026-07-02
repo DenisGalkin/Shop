@@ -29,11 +29,11 @@ def _html_shell() -> str:
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/assets/admin.css?v=1" />
+    <link rel="stylesheet" href="/admin/assets/admin.css?v=2" />
   </head>
   <body>
     <div id="app"></div>
-    <script src="/admin/assets/admin.js?v=1" defer></script>
+    <script src="/admin/assets/admin.js?v=2" defer></script>
   </body>
 </html>"""
 
