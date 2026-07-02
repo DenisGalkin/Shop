@@ -287,6 +287,31 @@ function closeModal() {
   render();
 }
 
+function syncProductFormDraft() {
+  const formNode = document.getElementById("product-form");
+  if (!formNode) return;
+  const form = new FormData(formNode);
+  state.forms.product = {
+    ...state.forms.product,
+    category_id: String(form.get("category_id") ?? state.forms.product.category_id ?? ""),
+    price: String(form.get("price") ?? state.forms.product.price ?? ""),
+    warranty_label: String(form.get("warranty_label") ?? state.forms.product.warranty_label ?? ""),
+    sort_order: String(form.get("sort_order") ?? state.forms.product.sort_order ?? ""),
+    title_i18n: Object.fromEntries(
+      PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`title_i18n_${code}`) ?? state.forms.product.title_i18n?.[code] ?? "")])
+    ),
+    internal_name_i18n: Object.fromEntries(
+      PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`internal_name_i18n_${code}`) ?? state.forms.product.internal_name_i18n?.[code] ?? "")])
+    ),
+    description_i18n: Object.fromEntries(
+      PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`description_i18n_${code}`) ?? state.forms.product.description_i18n?.[code] ?? "")])
+    ),
+    important_info_i18n: Object.fromEntries(
+      PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`important_info_i18n_${code}`) ?? state.forms.product.important_info_i18n?.[code] ?? "")])
+    ),
+  };
+}
+
 async function handleLogin(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -326,6 +351,7 @@ function resetProductForm() {
 }
 
 function setProductLocaleTab(locale) {
+  syncProductFormDraft();
   state.forms.product.active_locale = locale;
   render();
 }
@@ -496,23 +522,8 @@ function openStockDrawer(productId = "") {
   }
 }
 
-function syncStockDraftMeta() {
-  const counter = document.getElementById("stock-keys-count");
-  if (counter) {
-    counter.textContent = `${countKeys(state.forms.stock.keys)} найдено`;
-  }
-}
-
 function updateStockDraft(value) {
   state.forms.stock.keys = value;
-  syncStockDraftMeta();
-}
-
-function countKeys(value) {
-  return String(value || "")
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean).length;
 }
 
 async function submitStock(event) {
@@ -685,8 +696,11 @@ function renderDashboardSkeleton() {
   return `
     <div class="grid dashboard-grid">
       <div class="stats-grid dashboard-stats">
-        ${Array.from({ length: 6 }, () => `<section class="panel metric-card"><div class="table-skeleton">${renderSkeletonRows(1, 3)}</div></section>`).join("")}
+        ${Array.from({ length: 5 }, () => `<section class="panel metric-card"><div class="table-skeleton">${renderSkeletonRows(1, 3)}</div></section>`).join("")}
       </div>
+      <section class="panel dashboard-secondary-metric">
+        <div class="table-skeleton">${renderSkeletonRows(2, 1)}</div>
+      </section>
       <div class="grid dashboard-main">
         <section class="panel"><div class="table-skeleton">${renderSkeletonRows(1, 6)}</div></section>
         <section class="panel"><div class="table-skeleton">${renderSkeletonRows(1, 5)}</div></section>
@@ -694,6 +708,10 @@ function renderDashboardSkeleton() {
       <div class="dashboard-bottom">
         <section class="panel"><div class="table-skeleton">${renderSkeletonRows(6, 5)}</div></section>
         <section class="panel"><div class="table-skeleton">${renderSkeletonRows(6, 5)}</div></section>
+      </div>
+      <div class="dashboard-bottom dashboard-bottom-compact">
+        <section class="panel"><div class="table-skeleton">${renderSkeletonRows(1, 4)}</div></section>
+        <section class="panel"><div class="table-skeleton">${renderSkeletonRows(1, 4)}</div></section>
       </div>
     </div>
   `;
@@ -731,6 +749,21 @@ function formatPaymentProvider(value) {
   return map[value] || value || "—";
 }
 
+function getPaymentStatusMeta(payment) {
+  if (payment.purpose === "deposit" && payment.status === "completed") {
+    return { label: "deposit", tone: "neutral" };
+  }
+  const map = {
+    completed: { label: "paid", tone: "success" },
+    pending: { label: "pending", tone: "warn" },
+    failed: { label: "failed", tone: "danger" },
+    paid_unfulfilled: { label: "failed", tone: "danger" },
+    expired: { label: "failed", tone: "neutral" },
+    cancelled: { label: "failed", tone: "neutral" },
+  };
+  return map[payment.status] || { label: payment.status || "—", tone: "neutral" };
+}
+
 function renderDashboardAlert(message) {
   return `
     <div class="dashboard-alert">
@@ -742,7 +775,7 @@ function renderDashboardAlert(message) {
 
 function renderSalesChart(data) {
   if (!data.stats.sales_last_7_days_total) {
-    return renderEmptyState("Продаж за последние 7 дней пока нет.", "График появится сразу после первых подтвержденных заказов.");
+    return renderEmptyState("Продаж за последние 7 дней пока нет.", "График появится сразу после первых подтвержденных заказов.", "", "dashboard-empty chart-empty");
   }
   const maxRevenue = Math.max(...data.series.map((item) => item.revenue_cents), 1);
   return `
@@ -765,22 +798,94 @@ function renderSalesChart(data) {
   `;
 }
 
+function pluralizeInvoices(count) {
+  if (count % 10 === 1 && count % 100 !== 11) return "счет";
+  if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "счета";
+  return "счетов";
+}
+
+function pluralizeProducts(count) {
+  if (count % 10 === 1 && count % 100 !== 11) return "товар";
+  if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "товара";
+  return "товаров";
+}
+
+function pluralizeCategories(count) {
+  if (count % 10 === 1 && count % 100 !== 11) return "категория";
+  if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "категории";
+  return "категорий";
+}
+
+function getDashboardProblemStats(data) {
+  const lowStockOnly = data.low_stock.filter((item) => item.stock_count > 0);
+  return {
+    outOfStock: data.out_of_stock.length,
+    emptyCategories: data.empty_categories.length,
+    pendingPayments: Number(data.stats.payments_pending_total || 0),
+    paymentErrors: Number(data.stats.payment_errors_total || 0),
+    lowStock: lowStockOnly.length,
+    total:
+      data.out_of_stock.length +
+      data.empty_categories.length +
+      Number(data.stats.payments_pending_total || 0) +
+      Number(data.stats.payment_errors_total || 0) +
+      lowStockOnly.length,
+  };
+}
+
+function getDashboardProblemSummary(data) {
+  const stats = getDashboardProblemStats(data);
+  const parts = [];
+  if (stats.lowStock) parts.push(`${stats.lowStock} ${pluralizeProducts(stats.lowStock)} low stock`);
+  if (stats.outOfStock) parts.push(`${stats.outOfStock} без ключей`);
+  if (stats.emptyCategories) parts.push(`${stats.emptyCategories} ${pluralizeCategories(stats.emptyCategories)} пуст${stats.emptyCategories === 1 ? "ая" : "ые"}`);
+  if (stats.pendingPayments) parts.push(`${stats.pendingPayments} ${pluralizeInvoices(stats.pendingPayments)} ожида${stats.pendingPayments === 1 ? "ет" : "ют"} оплаты`);
+  if (stats.paymentErrors) parts.push(`${stats.paymentErrors} ошибок платежей`);
+  return parts.slice(0, 3).join(" · ") || "Критичных проблем нет";
+}
+
 function getDashboardAttentionItems(data) {
   const items = [];
+  data.empty_categories.forEach((item) => {
+    items.push({
+      title: `${item.title} — категория без товаров`,
+      meta: "Добавьте товары или скройте пустую категорию.",
+      badge: "Пусто",
+      tone: "neutral",
+      actionLabel: "Открыть",
+      action: `setTab('catalog')`,
+    });
+  });
   data.out_of_stock.forEach((item) => {
     items.push({
-      title: item.title,
+      title: `${item.title} — нет ключей`,
       meta: `${item.category_title} · ${item.price_label}`,
       badge: "0 ключей",
       tone: "danger",
+      actionLabel: "Пополнить",
+      action: `openStockDrawer(${item.id})`,
     });
   });
+  data.low_stock
+    .filter((item) => item.stock_count > 0)
+    .forEach((item) => {
+      items.push({
+        title: `${item.title} — осталось ${item.stock_count} ${item.stock_count === 1 ? "ключ" : item.stock_count < 5 ? "ключа" : "ключей"}`,
+        meta: `${item.category_title} · ${item.price_label}`,
+        badge: "Low stock",
+        tone: "warn",
+        actionLabel: "Пополнить",
+        action: `openStockDrawer(${item.id})`,
+      });
+    });
   if (data.stats.payments_pending_total > 0) {
     items.push({
-      title: `${data.stats.payments_pending_total} ${data.stats.payments_pending_total === 1 ? "счет ожидает" : "счетов ожидают"} оплаты`,
+      title: `${data.stats.payments_pending_total} ${pluralizeInvoices(data.stats.payments_pending_total)} ожида${data.stats.payments_pending_total === 1 ? "ет" : "ют"} оплаты`,
       meta: "Проверьте статусы инвойсов и резервов.",
       badge: "Оплата",
       tone: "warn",
+      actionLabel: "К платежам",
+      action: `setTab('payments')`,
     });
   }
   if (data.stats.payment_errors_total > 0) {
@@ -789,22 +894,8 @@ function getDashboardAttentionItems(data) {
       meta: "Есть неуспешные или невыданные оплаты.",
       badge: "Ошибка",
       tone: "danger",
-    });
-  }
-  data.hidden_stocked_products.forEach((item) => {
-    items.push({
-      title: item.title,
-      meta: "Скрытый товар с доступными ключами.",
-      badge: `${item.stock_count} ключ.`,
-      tone: "neutral",
-    });
-  });
-  data.empty_categories.forEach((item) => {
-    items.push({
-      title: item.title,
-      meta: "Категория без товаров.",
-      badge: "Пусто",
-      tone: "neutral",
+      actionLabel: "К платежам",
+      action: `setTab('payments')`,
     });
   });
   return items.slice(0, 8);
@@ -813,7 +904,7 @@ function getDashboardAttentionItems(data) {
 function renderAttentionList(data) {
   const items = getDashboardAttentionItems(data);
   if (!items.length) {
-    return renderEmptyState("Проблем не найдено", "Нет пустых категорий, ошибок платежей и критичных остатков.");
+    return renderEmptyState("Критичных проблем нет", "Нет пустых категорий, ошибок платежей и дефицита по ключам.", "", "compact-empty");
   }
   return `
     <div class="attention-list">
@@ -825,7 +916,10 @@ function renderAttentionList(data) {
                 <strong>${escapeHtml(item.title)}</strong>
                 <small>${escapeHtml(item.meta)}</small>
               </div>
-              <span class="chip ${item.tone}">${escapeHtml(item.badge)}</span>
+              <div class="attention-actions">
+                <span class="chip ${item.tone}">${escapeHtml(item.badge)}</span>
+                ${item.actionLabel ? `<button class="secondary-button small" type="button" onclick="${item.action}">${escapeHtml(item.actionLabel)}</button>` : ""}
+              </div>
             </article>
           `
         )
@@ -854,9 +948,18 @@ function renderDashboard() {
         ${renderMetricCard("Заказы сегодня", String(data.stats.orders_today), "Подтверждено", `${data.stats.orders_total} всего`, data.stats.orders_today ? "success" : "neutral")}
         ${renderMetricCard("Ожидают оплаты", String(data.stats.payments_pending_total), "Счета", data.stats.payment_errors_total ? `${data.stats.payment_errors_total} ошибок` : "Без ошибок", data.stats.payments_pending_total ? "warn" : "neutral")}
         ${renderMetricCard("Ключей на складе", String(data.stats.stock_total), "Доступно", `${data.stats.products_total} товаров`, data.stats.stock_total ? "success" : "danger")}
-        ${renderMetricCard("Товаров без ключей", String(data.stats.products_without_keys_total), "Активные позиции", data.low_stock.length ? `${data.low_stock.length} требуют проверки` : "Без дефицита", data.stats.products_without_keys_total ? "danger" : "neutral")}
-        ${renderMetricCard("Пользователей всего", String(data.stats.users_total), "Клиентская база", `${data.stats.categories_total} категорий`)}
+        ${renderMetricCard("Проблемы", String(getDashboardProblemStats(data).total), "Операционный риск", getDashboardProblemSummary(data), getDashboardProblemStats(data).total ? "danger" : "success")}
       </div>
+      <section class="panel dashboard-secondary-metric">
+        <div>
+          <strong>Пользователей всего</strong>
+          <div class="dashboard-secondary-value">${escapeHtml(String(data.stats.users_total))}</div>
+        </div>
+        <div class="dashboard-secondary-meta">
+          <span>${escapeHtml(`${data.stats.categories_total} категорий`)}</span>
+          <span>${escapeHtml(`${data.stats.products_total} товаров`)}</span>
+        </div>
+      </section>
       <div class="grid dashboard-main">
         <section class="panel dashboard-chart-panel">
           <div class="panel-header">
@@ -874,6 +977,7 @@ function renderDashboard() {
               <h3>Требуют внимания</h3>
               <p>Критичные остатки, платежные проблемы и пустые разделы.</p>
             </div>
+            <span class="chip ${getDashboardProblemStats(data).total ? "danger" : "success"}">${escapeHtml(getDashboardProblemSummary(data))}</span>
           </div>
           ${renderAttentionList(data)}
         </section>
@@ -904,6 +1008,7 @@ function renderDashboard() {
             emptyTitle: "Заказов пока нет",
             emptyDescription: "После первых продаж здесь появится история последних заказов.",
             colSpan: 6,
+            emptyClassName: "compact-empty",
           })}
         </section>
         <section class="panel">
@@ -921,7 +1026,7 @@ function renderDashboard() {
                 <td>${formatUserLabel(item.buyer_name, "", item.buyer_tg_id)}</td>
                 <td><div class="cell-primary"><strong>${escapeHtml(formatPaymentProvider(item.payment_type))}</strong><small>${escapeHtml(item.product_title || item.purpose)}</small></div></td>
                 <td class="mono">${escapeHtml(item.amount_label)}</td>
-                <td><span class="chip ${getStatusMeta(item.status).tone}">${escapeHtml(getStatusMeta(item.status).label)}</span></td>
+                <td><span class="chip ${getPaymentStatusMeta(item).tone}">${escapeHtml(getPaymentStatusMeta(item).label)}</span></td>
                 <td>${escapeHtml(item.created_label)}</td>
               `
             ),
@@ -931,6 +1036,7 @@ function renderDashboard() {
             emptyTitle: "Платежей пока нет",
             emptyDescription: "Когда появятся инвойсы и пополнения, они будут показаны здесь.",
             colSpan: 6,
+            emptyClassName: "compact-empty",
           })}
         </section>
       </div>
@@ -954,14 +1060,14 @@ function renderDashboard() {
                             <small>${escapeHtml(user.username ? `@${user.username}` : "без username")} · ID ${user.tg_id}</small>
                           </div>
                           <div class="buyer-stats">
-                            <span>${user.orders_count} заказов</span>
+                            <span>${user.orders_count} заказов · ${escapeHtml(user.last_order_label || "—")}</span>
                             <strong>${escapeHtml(user.total_spent_label)}</strong>
                           </div>
                         </article>
                       `
                     )
                     .join("")
-                : `<div class="empty-state compact"><strong>Покупателей пока нет</strong><p>После первых подтвержденных заказов здесь появится список активных клиентов.</p></div>`
+                : renderEmptyState("Покупателей пока нет", "После первых подтвержденных заказов здесь появится список активных клиентов.", "", "compact-empty")
             }
           </div>
         </section>
@@ -985,14 +1091,14 @@ function renderDashboard() {
                             <small>${escapeHtml(item.category_title)} · ${escapeHtml(item.price_label)}</small>
                           </div>
                           <div class="stock-actions">
-                            <span class="chip ${item.stock_count === 0 ? "danger" : "warn"}">${item.stock_count} шт.</span>
+                            <span class="chip ${item.stock_count === 0 ? "danger" : "warn"}">${item.stock_count === 0 ? "0 ключей" : `${item.stock_count} ключ.`}</span>
                             <button class="secondary-button small" type="button" onclick="openStockDrawer(${item.id})">Пополнить</button>
                           </div>
                         </article>
                       `
                     )
                     .join("")
-                : `<div class="empty-state compact"><strong>Остатков достаточно</strong><p>Сейчас нет товаров с низким остатком или нулевым складом.</p></div>`
+                : renderEmptyState("Остатков достаточно", "Сейчас нет товаров с низким остатком или нулевым складом.", "", "compact-empty")
             }
           </div>
         </section>
@@ -1033,9 +1139,9 @@ function renderErrorPanel(message, retryAction) {
   `;
 }
 
-function renderEmptyState(title, description, actionHtml = "") {
+function renderEmptyState(title, description, actionHtml = "", className = "") {
   return `
-    <div class="empty-state">
+    <div class="empty-state ${className}">
       <strong>${escapeHtml(title)}</strong>
       <p>${escapeHtml(description)}</p>
       ${actionHtml}
@@ -1043,7 +1149,7 @@ function renderEmptyState(title, description, actionHtml = "") {
   `;
 }
 
-function renderDataTable({ columns, rows, loading, error, retryAction, emptyTitle, emptyDescription, colSpan }) {
+function renderDataTable({ columns, rows, loading, error, retryAction, emptyTitle, emptyDescription, colSpan, emptyClassName = "" }) {
   if (loading) {
     return `<div class="table-skeleton">${renderSkeletonRows(columns.length, 6)}</div>`;
   }
@@ -1051,7 +1157,7 @@ function renderDataTable({ columns, rows, loading, error, retryAction, emptyTitl
     return renderErrorPanel(error, retryAction);
   }
   if (!rows.length) {
-    return renderEmptyState(emptyTitle, emptyDescription);
+    return renderEmptyState(emptyTitle, emptyDescription, "", emptyClassName);
   }
   return `
     <div class="data-table-shell">
@@ -1620,7 +1726,6 @@ function renderModal() {
               <input name="sort_order" value="${escapeHtml(state.forms.category.sort_order)}" />
             </div>
             <div class="field full form-actions">
-              <button class="secondary-button" type="button" data-close-modal="true">Отмена</button>
               <button class="primary-button" type="submit">${state.forms.category.id ? "Сохранить" : "Создать"}</button>
             </div>
           </form>
@@ -1706,11 +1811,10 @@ function renderModal() {
             <div class="field full">
               <label>Локализация товара</label>
               <p class="field-note">Заполните RU, EN и UA. Пользователь увидит язык своего интерфейса, а если перевод пустой, сработает fallback.</p>
-              ${localizationTabs}
               ${localizationPanels}
             </div>
             <div class="field full form-actions">
-              <button class="secondary-button" type="button" data-close-modal="true">Отмена</button>
+              ${localizationTabs}
               <button class="primary-button" type="submit">${state.forms.product.id ? "Сохранить" : "Создать"}</button>
             </div>
           </form>
@@ -1719,7 +1823,6 @@ function renderModal() {
     `;
   }
   const selectedProduct = state.products.find((item) => String(item.id) === state.forms.stock.product_id);
-  const keyCount = countKeys(state.forms.stock.keys);
   return `
     <div class="modal-backdrop" data-close-modal="true">
       <aside class="drawer wide" role="dialog" aria-modal="true">
@@ -1762,10 +1865,6 @@ function renderModal() {
           </div>
           <div class="field full stock-draft-actions">
             <button class="primary-button" type="submit">Добавить ключи</button>
-            <div class="drawer-footer-meta">
-              <span class="muted">Подсказка: по одному ключу на строку</span>
-              <span class="chip" id="stock-keys-count">${keyCount} найдено</span>
-            </div>
           </div>
           <div class="field full">
             <label>Загруженные ключи</label>
@@ -1827,14 +1926,13 @@ function renderApp() {
         </div>
       </aside>
       <main class="content">
-        <div class="topbar">
+          <div class="topbar">
           <div class="page-title">
             <h1>${escapeHtml(titleMap[state.currentTab])}</h1>
             <p>${escapeHtml(descriptionMap[state.currentTab])}</p>
           </div>
           <div class="topbar-actions">
             <button class="secondary-button" id="refresh-button">${state.refreshing ? "Обновляем..." : "Обновить"}</button>
-            <button class="primary-button" id="goto-catalog-button">К ассортименту</button>
           </div>
         </div>
         ${renderCurrentTab()}
@@ -1848,28 +1946,31 @@ function renderApp() {
     button.addEventListener("click", () => setTab(button.dataset.tab));
   });
   document.getElementById("refresh-button")?.addEventListener("click", refreshAllData);
-  document.getElementById("goto-catalog-button")?.addEventListener("click", () => setTab("catalog"));
   document.getElementById("logout-button")?.addEventListener("click", handleLogout);
   document.getElementById("settings-form")?.addEventListener("submit", saveSettings);
   document.getElementById("users-search-form")?.addEventListener("submit", applyUserFilters);
   document.getElementById("catalog-products-filters")?.addEventListener("submit", applyProductFilters);
   document.getElementById("category-form")?.addEventListener("submit", submitCategory);
   document.getElementById("product-form")?.addEventListener("submit", submitProduct);
+  document.getElementById("product-form")?.addEventListener("input", syncProductFormDraft);
+  document.getElementById("product-form")?.addEventListener("change", syncProductFormDraft);
   document.getElementById("stock-form")?.addEventListener("submit", submitStock);
   document.querySelector('#stock-form [name="product_id"]')?.addEventListener("change", (event) => {
     changeStockProduct(event.currentTarget.value).catch((error) => showToast(error.message));
   });
   document.getElementById("stock-keys-textarea")?.addEventListener("input", (event) => updateStockDraft(event.currentTarget.value));
-  document.querySelectorAll("[data-close-modal]").forEach((node) => {
+  document.querySelectorAll(".modal-backdrop").forEach((node) => {
+    node.addEventListener("pointerdown", (event) => {
+      node.dataset.backdropPointerDown = event.target === node ? "true" : "false";
+    });
     node.addEventListener("click", (event) => {
-      if (event.target === node) {
-        closeModal();
-        return;
-      }
-      if (event.target.closest(".icon-button, .secondary-button[data-close-modal]")) {
+      if (event.target === node && node.dataset.backdropPointerDown === "true") {
         closeModal();
       }
     });
+  });
+  document.querySelectorAll(".icon-button[data-close-modal]").forEach((node) => {
+    node.addEventListener("click", closeModal);
   });
 }
 

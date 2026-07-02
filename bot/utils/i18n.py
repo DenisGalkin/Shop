@@ -8,7 +8,7 @@ SUPPORTED_LANGUAGES = ("en", "ru", "uk")
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "ru": {
-        "choose_language_prompt": '[5447410659077661506] Choose language / Выберите язык / Виберiть мову',
+        "choose_language_prompt": '{globus} Choose language / Выберите язык / Виберiть мову',
         "language_english": "English",
         "language_russian": "Русский",
         "language_ukrainian": "Українська",
@@ -364,7 +364,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "shop_product_fallback": "Store product",
     },
     "uk": {
-        "choose_language_prompt": '[5447410659077661506] Choose language / Выберите язык / Виберiть мову',
+        "choose_language_prompt": '{globus} Choose language / Выберите язык / Виберiть мову',
         "language_english": "English",
         "language_russian": "Російська",
         "language_ukrainian": "Українська",
