@@ -20,8 +20,18 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "webadmin" / "static"
 SESSION_COOKIE = "shop_admin_session"
 
 
+def _asset_version(filename: str) -> str:
+    path = STATIC_DIR / filename
+    try:
+        return str(int(path.stat().st_mtime))
+    except OSError:
+        return "1"
+
+
 def _html_shell() -> str:
-    return """<!doctype html>
+    css_version = _asset_version("admin.css")
+    js_version = _asset_version("admin.js")
+    return f"""<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
@@ -30,11 +40,11 @@ def _html_shell() -> str:
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/assets/admin.css?v=5" />
+    <link rel="stylesheet" href="/admin/assets/admin.css?v={css_version}" />
   </head>
   <body>
     <div id="app"></div>
-    <script src="/admin/assets/admin.js?v=5" defer></script>
+    <script src="/admin/assets/admin.js?v={js_version}" defer></script>
   </body>
 </html>"""
 
