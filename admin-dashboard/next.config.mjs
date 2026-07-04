@@ -2,6 +2,9 @@
 const nextConfig = {
   basePath: '/admin',
   output: 'standalone',
+  turbopack: {
+    root: process.cwd(),
+  },
   async rewrites() {
     return [
       {

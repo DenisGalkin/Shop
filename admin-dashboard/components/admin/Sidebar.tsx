@@ -9,15 +9,16 @@ import {
   Settings,
   Bot,
   ChevronRight,
-  Activity,
+  Tag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export type TabId = 'overview' | 'assortment' | 'users' | 'orders' | 'payments' | 'settings'
+export type TabId = 'overview' | 'products' | 'categories' | 'users' | 'orders' | 'payments' | 'settings'
 
 const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'overview', label: 'Обзор', icon: LayoutDashboard },
-  { id: 'assortment', label: 'Ассортимент', icon: Package },
+  { id: 'products', label: 'Товары', icon: Package },
+  { id: 'categories', label: 'Категории', icon: Tag },
   { id: 'users', label: 'Пользователи', icon: Users },
   { id: 'orders', label: 'Заказы', icon: ShoppingCart },
   { id: 'payments', label: 'Платежи', icon: CreditCard },
@@ -43,25 +44,20 @@ export default function Sidebar({ active, onChange }: SidebarProps) {
         </div>
       </div>
 
-      {/* Bot status */}
       <div className="px-4 py-3 border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-raised/50">
           <span className="relative flex w-2 h-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
           </span>
-          <span className="text-xs text-muted-foreground">Бот онлайн</span>
-          <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
-            <Activity className="w-3 h-3" />
-            99.8%
-          </span>
+          <span className="text-xs text-muted-foreground">API connected</span>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 px-3 pb-2 pt-1">
-          Навигация
+          Navigation
         </p>
         {navItems.map((item) => {
           const Icon = item.icon
@@ -84,9 +80,7 @@ export default function Sidebar({ active, onChange }: SidebarProps) {
                 )}
               />
               <span className="flex-1 text-left">{item.label}</span>
-              {isActive && (
-                <ChevronRight className="w-3 h-3 text-neon/60 shrink-0" />
-              )}
+              {isActive && <ChevronRight className="w-3 h-3 text-neon/60 shrink-0" />}
             </button>
           )
         })}
@@ -99,8 +93,8 @@ export default function Sidebar({ active, onChange }: SidebarProps) {
             AD
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-foreground truncate">Администратор</p>
-            <p className="text-[10px] text-muted-foreground">Полный доступ</p>
+            <p className="text-xs font-medium text-foreground truncate">Administrator</p>
+            <p className="text-[10px] text-muted-foreground">Full access</p>
           </div>
         </div>
       </div>
