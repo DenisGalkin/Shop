@@ -975,10 +975,10 @@ function renderDashboard() {
     return renderDashboardSkeleton();
   }
   if (resource.error && !data) {
-    return renderErrorPanel("Не удалось загрузить dashboard", "loadDashboard");
+    return renderErrorPanel("Не удалось загрузить обзор", "loadDashboard");
   }
   if (!data) {
-    return `<div class="panel"><div class="empty-state"><strong>Нет данных</strong><p>Dashboard пока пуст.</p></div></div>`;
+    return `<div class="panel"><div class="empty-state"><strong>Нет данных</strong><p>Раздел обзора пока пуст.</p></div></div>`;
   }
   return `
     <div class="grid dashboard-grid">
@@ -1918,15 +1918,15 @@ function renderModal() {
 
 function renderApp() {
   const tabs = [
-    ["dashboard", "Dashboard"],
-    ["catalog", "Ассортимент"],
-    ["users", "Пользователи"],
-    ["orders", "Заказы"],
-    ["payments", "Платежи"],
-    ["settings", "Настройки"],
+    ["dashboard", "Обзор", "◈"],
+    ["catalog", "Ассортимент", "▣"],
+    ["users", "Пользователи", "◉"],
+    ["orders", "Заказы", "◌"],
+    ["payments", "Платежи", "◎"],
+    ["settings", "Настройки", "✦"],
   ];
   const titleMap = {
-    dashboard: "Dashboard",
+    dashboard: "Обзор",
     catalog: "Ассортимент",
     users: "Пользователи",
     orders: "Заказы",
@@ -1945,14 +1945,14 @@ function renderApp() {
     <div class="shell">
       <aside class="sidebar">
         <div class="brand">
-          <small>Shop Bot Admin</small>
-          <strong>Control Center</strong>
+          <strong class="brand-title">VEXND SHOP</strong>
+          <small>Admin Panel</small>
         </div>
         <nav class="nav">
           ${tabs
             .map(
-              ([id, label]) =>
-                `<button class="${state.currentTab === id ? "active" : ""}" data-tab="${id}">${escapeHtml(label)}</button>`
+              ([id, label, icon]) =>
+                `<button class="${state.currentTab === id ? "active" : ""}" data-tab="${id}"><span class="nav-icon" aria-hidden="true">${escapeHtml(icon)}</span><span class="nav-label">${escapeHtml(label)}</span></button>`
             )
             .join("")}
         </nav>

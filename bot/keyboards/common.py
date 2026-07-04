@@ -155,17 +155,17 @@ def purchase_methods_kb(
     platega_enabled: bool,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(
+        text=tr(lang, "buy_balance_option", balance=format_money(balance_cents)),
+        callback_data=f"buy:balance:{product_id}",
+        icon_custom_emoji_id=premium_button_icon("balance"),
+    )
     if heleket_enabled:
         builder.button(
             text="Криптовалюта" if lang != "en" else "Cryptocurrency",
             callback_data=f"buy:heleket:{product_id}",
             icon_custom_emoji_id=premium_button_icon("heleket"),
         )
-    builder.button(
-        text=tr(lang, "buy_balance_option", balance=format_money(balance_cents)),
-        callback_data=f"buy:balance:{product_id}",
-        icon_custom_emoji_id=premium_button_icon("balance"),
-    )
     if cryptobot_enabled:
         builder.button(
             text="CryptoBot",
