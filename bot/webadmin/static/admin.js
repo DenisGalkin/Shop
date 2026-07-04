@@ -1928,7 +1928,7 @@ function renderApp() {
     ["users", "Пользователи", "/admin/assets/icons/users.png"],
     ["orders", "Заказы", "/admin/assets/icons/orders.png"],
     ["payments", "Платежи", "/admin/assets/icons/payments.png"],
-    ["settings", "Настройки", ""],
+    ["settings", "Настройки", "/admin/assets/icons/settings.png"],
   ];
   const titleMap = {
     dashboard: "Обзор",
@@ -1957,7 +1957,7 @@ function renderApp() {
           ${tabs
             .map(
               ([id, label, icon]) =>
-                `<button class="${state.currentTab === id ? "active" : ""}" data-tab="${id}">${icon ? `<img class="nav-icon" src="${escapeHtml(icon)}" alt="" aria-hidden="true" />` : `<span class="nav-icon-fallback" aria-hidden="true">✦</span>`}<span class="nav-label">${escapeHtml(label)}</span></button>`
+                `<button class="${state.currentTab === id ? "active" : ""}" data-tab="${id}"><img class="nav-icon" src="${escapeHtml(icon)}" alt="" aria-hidden="true" /><span class="nav-label">${escapeHtml(label)}</span></button>`
             )
             .join("")}
         </nav>

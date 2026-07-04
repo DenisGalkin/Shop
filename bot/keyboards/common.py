@@ -274,7 +274,7 @@ def deposit_methods_kb(
         )
     if platega_enabled:
         builder.button(
-            text="СБП (+ 8%)" if lang != "en" else "FSP (+ 8%)",
+            text="СБП (+8%)" if lang != "en" else "FSP (+8%)",
             callback_data="deposit:method:platega",
             icon_custom_emoji_id=premium_button_icon("platega"),
         )
