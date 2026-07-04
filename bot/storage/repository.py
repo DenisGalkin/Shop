@@ -1335,6 +1335,40 @@ class ShopRepository:
             return result.get("payment") or payment or {}
         return payment or {}
 
+    async def attach_heleket_invoice(self, payment_id: int, invoice: dict[str, Any]) -> dict[str, Any]:
+        status = self._heleket_status(invoice)
+        await self.db.execute(
+            """
+            UPDATE payments
+            SET provider_invoice_id = ?,
+                provider_invoice_url = ?,
+                provider_status = ?,
+                merchant_id = NULL,
+                external_amount = ?,
+                error_text = NULL,
+                updated_at = ?,
+                expires_at = COALESCE(?, expires_at),
+                last_checked_at = ?
+            WHERE id = ?
+            """,
+            (
+                invoice.get("uuid"),
+                invoice.get("url"),
+                status,
+                self._heleket_external_amount(invoice),
+                utcnow_iso(),
+                epoch_to_iso(invoice.get("expired_at")),
+                utcnow_iso(),
+                payment_id,
+            ),
+        )
+        await self.db.commit()
+        payment = await self.get_payment_by_id(payment_id)
+        if status in {"paid", "paid_over"}:
+            result = await self.apply_heleket_invoice(invoice)
+            return result.get("payment") or payment or {}
+        return payment or {}
+
     async def attach_lolzteam_invoice(self, payment_id: int, invoice: dict[str, Any]) -> dict[str, Any]:
         await self.db.execute(
             """
@@ -1512,6 +1546,103 @@ class ShopRepository:
 
             now_iso = utcnow_iso()
             if expires_at_iso and expires_at_iso <= now_iso:
+                await self.db.execute(
+                    """
+                    UPDATE payments
+                    SET status = 'expired',
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (utcnow_iso(), payment["id"]),
+                )
+                if payment.get("reserved_stock_item_id"):
+                    await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                payment["status"] = "expired"
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                await self.db.commit()
+                return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
+
+            await self.db.execute(
+                "UPDATE payments SET status = 'pending', updated_at = ? WHERE id = ?",
+                (utcnow_iso(), payment["id"]),
+            )
+            payment["status"] = "pending"
+            user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+            await self.db.commit()
+            return {"action": "pending", "payment": payment, "user": dict(user) if user else {}, "order": None}
+        except Exception:
+            await self.db.rollback()
+            raise
+
+    async def apply_heleket_invoice(self, invoice: dict[str, Any]) -> dict[str, Any]:
+        provider_invoice_id = str(invoice.get("uuid") or "").strip()
+        provider_payment_id = str(invoice.get("order_id") or "").strip()
+        if not provider_invoice_id and not provider_payment_id:
+            raise ValueError("Heleket invoice identifiers are missing")
+        await self.db.execute("BEGIN IMMEDIATE")
+        try:
+            if provider_invoice_id:
+                payment_row = await self._fetchone(
+                    "SELECT * FROM payments WHERE provider_invoice_id = ?",
+                    (provider_invoice_id,),
+                )
+            else:
+                payment_row = None
+            if payment_row is None and provider_payment_id:
+                payment_row = await self._fetchone(
+                    "SELECT * FROM payments WHERE provider_payment_id = ?",
+                    (provider_payment_id,),
+                )
+            if payment_row is None:
+                raise ValueError("Payment not found for invoice")
+            payment = dict(payment_row)
+            if payment["status"] == "completed":
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                order = None
+                if payment["order_id"]:
+                    order = await self.get_order(payment["user_id"], payment["order_id"])
+                await self.db.rollback()
+                return {"action": "already_completed", "payment": payment, "user": dict(user) if user else {}, "order": order}
+
+            status = self._heleket_status(invoice)
+            expires_at_iso = epoch_to_iso(invoice.get("expired_at")) or payment.get("expires_at")
+            await self.db.execute(
+                """
+                UPDATE payments
+                SET provider_invoice_id = COALESCE(?, provider_invoice_id),
+                    provider_invoice_url = COALESCE(?, provider_invoice_url),
+                    provider_status = ?,
+                    external_amount = ?,
+                    updated_at = ?,
+                    expires_at = COALESCE(?, expires_at),
+                    last_checked_at = ?
+                WHERE id = ?
+                """,
+                (
+                    provider_invoice_id or None,
+                    invoice.get("url"),
+                    status,
+                    self._heleket_external_amount(invoice),
+                    utcnow_iso(),
+                    expires_at_iso,
+                    utcnow_iso(),
+                    payment["id"],
+                ),
+            )
+            payment["provider_status"] = status
+            payment["provider_invoice_id"] = provider_invoice_id or payment.get("provider_invoice_id")
+            payment["provider_payment_id"] = provider_payment_id or payment.get("provider_payment_id")
+            payment["provider_invoice_url"] = invoice.get("url") or payment.get("provider_invoice_url")
+            payment["external_amount"] = self._heleket_external_amount(invoice)
+            payment["expires_at"] = expires_at_iso
+
+            if status in {"paid", "paid_over"}:
+                result = await self._complete_paid_payment_locked(payment)
+                await self.db.commit()
+                return result
+
+            now_iso = utcnow_iso()
+            if self._heleket_is_terminal(invoice) or (expires_at_iso and expires_at_iso <= now_iso):
                 await self.db.execute(
                     """
                     UPDATE payments
@@ -1771,6 +1902,43 @@ class ShopRepository:
         if amount is not None and currency:
             return f"{amount} {currency}"
         return str(amount or "")
+
+    @staticmethod
+    def _heleket_status(invoice: dict[str, Any]) -> str:
+        return str(invoice.get("payment_status") or invoice.get("status") or "check").strip().lower()
+
+    @classmethod
+    def _heleket_is_terminal(cls, invoice: dict[str, Any]) -> bool:
+        status = cls._heleket_status(invoice)
+        if status in {"paid", "paid_over"}:
+            return False
+        if status in {
+            "wrong_amount",
+            "fail",
+            "cancel",
+            "system_fail",
+            "refund_process",
+            "refund_fail",
+            "refund_paid",
+            "locked",
+        }:
+            return True
+        return bool(invoice.get("is_final"))
+
+    @classmethod
+    def _heleket_external_amount(cls, invoice: dict[str, Any]) -> str:
+        payer_amount = invoice.get("payer_amount")
+        payer_currency = invoice.get("payer_currency")
+        if payer_amount is not None and payer_currency:
+            return f"{payer_amount} {payer_currency}"
+        payment_amount = invoice.get("payment_amount")
+        currency = invoice.get("currency")
+        if payment_amount is not None and currency:
+            return f"{payment_amount} {currency}"
+        amount = invoice.get("amount")
+        if amount is not None and currency:
+            return f"{amount} {currency}"
+        return str(invoice.get("uuid") or invoice.get("order_id") or "")
 
     async def _complete_paid_payment_locked(self, payment: dict[str, Any]) -> dict[str, Any]:
         user_row = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))

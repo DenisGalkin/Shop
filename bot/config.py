@@ -21,6 +21,17 @@ class Config:
     public_base_url: str
     app_host: str
     app_port: int
+    heleket_api_base: str
+    heleket_merchant_uuid: str
+    heleket_api_key: str
+    heleket_invoice_currency: str
+    heleket_invoice_lifetime: int
+    heleket_to_currency: str
+    heleket_network: str
+    heleket_is_payment_multiple: bool
+    heleket_subtract_percent: int
+    heleket_webhook_path_token: str
+    heleket_sync_interval_seconds: int
     cryptopay_api_base: str
     cryptopay_api_token: str
     cryptopay_invoice_currency: str
@@ -61,6 +72,10 @@ class Config:
         return bool(self.cryptopay_api_token)
 
     @property
+    def heleket_enabled(self) -> bool:
+        return bool(self.heleket_merchant_uuid and self.heleket_api_key)
+
+    @property
     def lolz_enabled(self) -> bool:
         return bool(self.lolz_merchant_id and self.lolz_api_token and self.lolz_merchant_token)
 
@@ -97,6 +112,11 @@ def load_config() -> Config:
     database_path = os.getenv("DATABASE_PATH", "data/shop.sqlite3")
     Path(database_path).parent.mkdir(parents=True, exist_ok=True)
 
+    heleket_merchant_uuid = os.getenv("HELEKET_MERCHANT_UUID", "").strip()
+    heleket_api_key = os.getenv("HELEKET_API_KEY", "").strip()
+    heleket_webhook_token = os.getenv("HELEKET_WEBHOOK_PATH_TOKEN", "").strip()
+    if heleket_api_key and not heleket_webhook_token:
+        heleket_webhook_token = sha256(heleket_api_key.encode("utf-8")).hexdigest()
     cryptopay_api_token = os.getenv("CRYPTOPAY_API_TOKEN", "").strip()
     cryptopay_webhook_token = os.getenv("CRYPTOPAY_WEBHOOK_PATH_TOKEN", "").strip()
     if cryptopay_api_token and not cryptopay_webhook_token:
@@ -131,6 +151,17 @@ def load_config() -> Config:
         public_base_url=os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/"),
         app_host=os.getenv("APP_HOST", "0.0.0.0").strip(),
         app_port=int(os.getenv("APP_PORT", "8080")),
+        heleket_api_base=os.getenv("HELEKET_API_BASE", "https://api.heleket.com").strip().rstrip("/"),
+        heleket_merchant_uuid=heleket_merchant_uuid,
+        heleket_api_key=heleket_api_key,
+        heleket_invoice_currency=os.getenv("HELEKET_INVOICE_CURRENCY", "USD").strip().upper(),
+        heleket_invoice_lifetime=int(os.getenv("HELEKET_INVOICE_LIFETIME", "3600")),
+        heleket_to_currency=os.getenv("HELEKET_TO_CURRENCY", "").strip().upper(),
+        heleket_network=os.getenv("HELEKET_NETWORK", "").strip(),
+        heleket_is_payment_multiple=_parse_bool(os.getenv("HELEKET_IS_PAYMENT_MULTIPLE"), default=True),
+        heleket_subtract_percent=int(os.getenv("HELEKET_SUBTRACT_PERCENT", "0")),
+        heleket_webhook_path_token=heleket_webhook_token,
+        heleket_sync_interval_seconds=int(os.getenv("HELEKET_SYNC_INTERVAL_SECONDS", "60")),
         cryptopay_api_base=os.getenv("CRYPTOPAY_API_BASE", "https://pay.crypt.bot/api").strip().rstrip("/"),
         cryptopay_api_token=cryptopay_api_token,
         cryptopay_invoice_currency=os.getenv("CRYPTOPAY_INVOICE_CURRENCY", "USD").strip().upper(),
@@ -170,8 +201,12 @@ def load_config() -> Config:
         raise RuntimeError(
             "Lolzteam requires LOLZ_MERCHANT_ID, LOLZ_API_TOKEN, and LOLZ_MERCHANT_TOKEN to be configured together"
         )
+    if any((heleket_merchant_uuid, heleket_api_key, heleket_webhook_token)) and not config.heleket_enabled:
+        raise RuntimeError("Heleket requires HELEKET_MERCHANT_UUID and HELEKET_API_KEY to be configured together")
+    if not 0 <= config.heleket_subtract_percent <= 100:
+        raise RuntimeError("HELEKET_SUBTRACT_PERCENT must be between 0 and 100")
     if any((platega_merchant_id, platega_secret, platega_webhook_token)) and not config.platega_enabled:
         raise RuntimeError("Platega requires PLATEGA_MERCHANT_ID and PLATEGA_SECRET to be configured together")
-    if (config.cryptopay_enabled or config.lolz_enabled or config.platega_enabled) and not config.public_base_url:
+    if (config.heleket_enabled or config.cryptopay_enabled or config.lolz_enabled or config.platega_enabled) and not config.public_base_url:
         raise RuntimeError("PUBLIC_BASE_URL is required when payment providers are enabled")
     return config

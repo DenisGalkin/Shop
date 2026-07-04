@@ -19,6 +19,7 @@ from bot.utils.i18n import tr
 from bot.utils.premium_emoji import category_premium_emoji, premium_emoji
 
 from .cryptobot_client import CryptoBotApiError, CryptoBotClient
+from .heleket_client import HeleketApiError, HeleketClient
 from .lolzteam_client import LolzteamApiError, LolzteamClient
 from .platega_client import PlategaApiError, PlategaClient
 
@@ -195,7 +196,7 @@ class BasePaymentService:
             return tr(language_code, "secure_connection_error")
         if isinstance(exc, (ClientError, TimeoutError)):
             return tr(language_code, "gateway_unavailable")
-        if isinstance(exc, (CryptoBotApiError, LolzteamApiError, PlategaApiError)):
+        if isinstance(exc, (HeleketApiError, CryptoBotApiError, LolzteamApiError, PlategaApiError)):
             message = str(exc).strip()
             if not message or len(message) > 180:
                 return tr(language_code, "invoice_create_failed")
@@ -390,6 +391,124 @@ class CryptoBotPaymentService(BasePaymentService):
 
     def disabled_error_key(self) -> str:
         return "cryptopay_not_configured"
+
+
+class HeleketPaymentService(BasePaymentService):
+    payment_type = "heleket"
+
+    def __init__(
+        self,
+        *,
+        repo: ShopRepository,
+        config: Config,
+        client: HeleketClient,
+        bot: Bot,
+    ) -> None:
+        super().__init__(repo=repo, config=config, bot=bot)
+        self.client = client
+
+    def is_enabled(self) -> bool:
+        return self.config.heleket_enabled
+
+    def build_success_url(self, payment_id: int) -> str:
+        if not self.config.public_base_url:
+            return "https://t.me/"
+        return f"{self.config.public_base_url}/payments/heleket/success?payment_id={payment_id}"
+
+    def build_return_url(self) -> str:
+        if not self.config.public_base_url:
+            return "https://t.me/"
+        return self.config.public_base_url
+
+    def build_webhook_url(self) -> str | None:
+        if not self.config.public_base_url or not self.config.heleket_webhook_path_token:
+            return None
+        return f"{self.config.public_base_url}/payments/heleket/webhook/{self.config.heleket_webhook_path_token}"
+
+    def verify_webhook_signature(self, payload: dict[str, Any]) -> bool:
+        received_sign = str(payload.get("sign") or "").strip().lower()
+        if not received_sign or not self.config.heleket_api_key:
+            return False
+        signed_payload = dict(payload)
+        signed_payload.pop("sign", None)
+        expected_sign = self.client.sign_webhook_payload(signed_payload)
+        return hmac.compare_digest(expected_sign, received_sign)
+
+    async def process_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.verify_webhook_signature(payload):
+            raise PermissionError("Invalid Heleket webhook signature")
+        uuid = str(payload.get("uuid") or "").strip()
+        order_id = str(payload.get("order_id") or "").strip()
+        if not uuid and not order_id:
+            raise ValueError("Webhook payload is missing invoice identifiers")
+        canonical_invoice = await self.client.get_payment(uuid=uuid or None, order_id=order_id or None)
+        result = await self._apply_invoice(canonical_invoice)
+        await self._notify_on_state_change(result)
+        return result
+
+    async def _create_payment_record(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.repo.create_payment(payment_type=self.payment_type, **kwargs)
+
+    async def _create_invoice(self, payment: dict[str, Any], *, user: dict[str, Any]) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "amount": self.client.cents_to_amount(payment["amount_cents"]),
+            "currency": self.config.heleket_invoice_currency,
+            "order_id": payment["provider_payment_id"],
+            "url_return": self.build_return_url(),
+            "url_success": self.build_success_url(payment["id"]),
+            "is_payment_multiple": self.config.heleket_is_payment_multiple,
+            "lifetime": self.config.heleket_invoice_lifetime,
+            "subtract": self.config.heleket_subtract_percent,
+            "additional_data": json.dumps(
+                {
+                    "payment_db_id": payment["id"],
+                    "payment_ref": payment["provider_payment_id"],
+                    "purpose": payment["purpose"],
+                    "product_id": payment.get("product_id"),
+                    "tg_user_id": user["tg_id"],
+                },
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ),
+        }
+        webhook_url = self.build_webhook_url()
+        if webhook_url:
+            payload["url_callback"] = webhook_url
+        if self.config.heleket_to_currency:
+            payload["to_currency"] = self.config.heleket_to_currency
+        if self.config.heleket_network:
+            payload["network"] = self.config.heleket_network
+        return await self.client.create_invoice(payload)
+
+    async def _fetch_invoice_for_payment(self, payment: dict[str, Any]) -> dict[str, Any] | None:
+        provider_invoice_id = str(payment.get("provider_invoice_id") or "").strip()
+        provider_payment_id = str(payment.get("provider_payment_id") or "").strip()
+        if provider_invoice_id:
+            return await self.client.get_payment(uuid=provider_invoice_id)
+        if provider_payment_id:
+            return await self.client.get_payment(order_id=provider_payment_id)
+        return None
+
+    async def _attach_invoice(self, payment_id: int, invoice: dict[str, Any]) -> dict[str, Any]:
+        return await self.repo.attach_heleket_invoice(payment_id, invoice)
+
+    async def _apply_invoice(self, invoice: dict[str, Any]) -> dict[str, Any]:
+        return await self.repo.apply_heleket_invoice(invoice)
+
+    async def _list_pending_payments(self, limit: int) -> list[dict[str, Any]]:
+        return await self.repo.list_pending_payments(self.payment_type, limit=limit)
+
+    def invoice_currency(self) -> str:
+        return self.config.heleket_invoice_currency
+
+    def invoice_lifetime_seconds(self) -> int:
+        return self.config.heleket_invoice_lifetime
+
+    def sync_interval_seconds(self) -> int:
+        return self.config.heleket_sync_interval_seconds
+
+    def disabled_error_key(self) -> str:
+        return "heleket_not_configured"
 
 
 class LolzteamPaymentService(BasePaymentService):
@@ -627,15 +746,18 @@ class PaymentService:
         self,
         *,
         repo: ShopRepository,
+        heleket: HeleketPaymentService,
         cryptobot: CryptoBotPaymentService,
         lolzteam: LolzteamPaymentService,
         platega: PlategaPaymentService,
     ) -> None:
         self.repo = repo
+        self.heleket = heleket
         self.cryptobot = cryptobot
         self.lolzteam = lolzteam
         self.platega = platega
         self._providers: dict[str, PaymentProvider] = {
+            heleket.payment_type: heleket,
             cryptobot.payment_type: cryptobot,
             lolzteam.payment_type: lolzteam,
             platega.payment_type: platega,
@@ -667,11 +789,13 @@ class PaymentService:
         return await provider.sync_payment(payment)
 
     async def start_background_sync(self) -> None:
+        await self.heleket.start_background_sync()
         await self.cryptobot.start_background_sync()
         await self.lolzteam.start_background_sync()
         await self.platega.start_background_sync()
 
     async def stop_background_sync(self) -> None:
+        await self.heleket.stop_background_sync()
         await self.cryptobot.stop_background_sync()
         await self.lolzteam.stop_background_sync()
         await self.platega.stop_background_sync()

@@ -11,9 +11,16 @@ from aiogram.enums import ParseMode
 from bot.config import load_config
 from bot.handlers import admin, user
 from bot.services.cryptobot_client import CryptoBotClient
+from bot.services.heleket_client import HeleketClient
 from bot.services.lolzteam_client import LolzteamClient
 from bot.services.payment_web import create_payment_app
-from bot.services.payments import CryptoBotPaymentService, LolzteamPaymentService, PaymentService, PlategaPaymentService
+from bot.services.payments import (
+    CryptoBotPaymentService,
+    HeleketPaymentService,
+    LolzteamPaymentService,
+    PaymentService,
+    PlategaPaymentService,
+)
 from bot.services.platega_client import PlategaClient
 from bot.storage.repository import ShopRepository
 
@@ -36,6 +43,7 @@ async def main() -> None:
         timeout=ClientTimeout(total=20),
         connector=TCPConnector(ssl=ssl_context),
     )
+    heleket_client = HeleketClient(http_session, config.heleket_api_base, config.heleket_merchant_uuid, config.heleket_api_key)
     cryptobot_client = CryptoBotClient(http_session, config.cryptopay_api_base, config.cryptopay_api_token)
     lolzteam_client = LolzteamClient(http_session, config.lolz_api_base, config.lolz_api_token)
     platega_client = PlategaClient(
@@ -46,10 +54,17 @@ async def main() -> None:
         create_path=config.platega_create_path,
         create_path_fallback=config.platega_create_path_fallback,
     )
+    heleket_service = HeleketPaymentService(repo=repo, config=config, client=heleket_client, bot=bot)
     cryptobot_service = CryptoBotPaymentService(repo=repo, config=config, client=cryptobot_client, bot=bot)
     lolzteam_service = LolzteamPaymentService(repo=repo, config=config, client=lolzteam_client, bot=bot)
     platega_service = PlategaPaymentService(repo=repo, config=config, client=platega_client, bot=bot)
-    payment_service = PaymentService(repo=repo, cryptobot=cryptobot_service, lolzteam=lolzteam_service, platega=platega_service)
+    payment_service = PaymentService(
+        repo=repo,
+        heleket=heleket_service,
+        cryptobot=cryptobot_service,
+        lolzteam=lolzteam_service,
+        platega=platega_service,
+    )
     dp = Dispatcher()
     dp["config"] = config
     dp["repo"] = repo
@@ -58,7 +73,7 @@ async def main() -> None:
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
-    app = create_payment_app(payment_service, cryptobot_service, lolzteam_service, platega_service, repo, config)
+    app = create_payment_app(payment_service, heleket_service, cryptobot_service, lolzteam_service, platega_service, repo, config)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host=config.app_host, port=config.app_port)

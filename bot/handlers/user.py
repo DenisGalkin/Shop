@@ -291,6 +291,7 @@ async def buy_menu_handler(callback: CallbackQuery, repo: ShopRepository, config
             product_id,
             user["balance_cents"],
             lang,
+            heleket_enabled=config.heleket_enabled,
             cryptobot_enabled=config.cryptopay_enabled,
             lolz_enabled=config.lolz_enabled,
             platega_enabled=config.platega_enabled,
@@ -344,6 +345,7 @@ async def buy_balance_handler(callback: CallbackQuery, repo: ShopRepository) -> 
     await render_message(callback, text, reply_markup=order_detail_kb(1, lang))
 
 
+@router.callback_query(F.data.startswith("buy:heleket:"))
 @router.callback_query(F.data.startswith("buy:crypto:"))
 @router.callback_query(F.data.startswith("buy:lolz:"))
 @router.callback_query(F.data.startswith("buy:platega:"))
@@ -356,6 +358,7 @@ async def buy_invoice_handler(
     lang = _user_language(user)
     _, payment_method, product_id_raw = callback.data.split(":")
     payment_type_map = {
+        "heleket": "heleket",
         "crypto": "cryptobot",
         "lolz": "lolzteam",
         "platega": "platega",
@@ -468,7 +471,7 @@ async def order_detail_handler(callback: CallbackQuery, repo: ShopRepository) ->
 async def deposit_start_handler(callback: CallbackQuery, state: FSMContext, config: Config, repo: ShopRepository) -> None:
     user = await repo.get_user_by_tg_id(callback.from_user.id)
     lang = _user_language(user)
-    if not (config.cryptopay_enabled or config.lolz_enabled or config.platega_enabled):
+    if not (config.heleket_enabled or config.cryptopay_enabled or config.lolz_enabled or config.platega_enabled):
         await callback.answer(tr(lang, "deposit_unavailable"), show_alert=True)
         return
     await state.set_state(UserStates.waiting_deposit_amount)
@@ -506,6 +509,7 @@ async def deposit_amount_handler(message: Message, state: FSMContext, config: Co
         text,
         reply_markup=deposit_methods_kb(
             lang,
+            heleket_enabled=config.heleket_enabled,
             cryptobot_enabled=config.cryptopay_enabled,
             lolz_enabled=config.lolz_enabled,
             platega_enabled=config.platega_enabled,
@@ -528,7 +532,7 @@ async def deposit_method_handler(
         await callback.answer(tr(lang, "enter_amount_first"), show_alert=True)
         return
     method = callback.data.split(":")[2]
-    if method not in {"cryptobot", "lolzteam", "platega"}:
+    if method not in {"heleket", "cryptobot", "lolzteam", "platega"}:
         await callback.answer(tr(lang, "payment_method_unavailable"), show_alert=True)
         return
     try:

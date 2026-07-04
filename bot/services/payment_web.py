@@ -11,7 +11,13 @@ from bot.config import Config
 from bot.storage.repository import ShopRepository
 
 from .admin_web import setup_admin_routes
-from .payments import CryptoBotPaymentService, LolzteamPaymentService, PaymentService, PlategaPaymentService
+from .payments import (
+    CryptoBotPaymentService,
+    HeleketPaymentService,
+    LolzteamPaymentService,
+    PaymentService,
+    PlategaPaymentService,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -32,6 +38,24 @@ async def cryptobot_webhook(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="bad request")
     except Exception:
         logger.exception("Crypto Pay webhook processing failed")
+        raise web.HTTPInternalServerError(text="error")
+    return web.json_response({"ok": True})
+
+
+async def heleket_webhook(request: web.Request) -> web.Response:
+    service: HeleketPaymentService = request.app["heleket_service"]
+    raw_body = await request.read()
+    try:
+        payload: dict[str, Any] = json.loads(raw_body.decode("utf-8"))
+        await service.process_webhook(payload)
+    except PermissionError:
+        logger.warning("Rejected Heleket webhook due to invalid signature")
+        raise web.HTTPForbidden(text="forbidden")
+    except ValueError:
+        logger.exception("Rejected malformed Heleket webhook payload")
+        raise web.HTTPBadRequest(text="bad request")
+    except Exception:
+        logger.exception("Heleket webhook processing failed")
         raise web.HTTPInternalServerError(text="error")
     return web.json_response({"ok": True})
 
@@ -92,6 +116,7 @@ async def payment_success(request: web.Request) -> web.Response:
 
 def create_payment_app(
     service: PaymentService,
+    heleket_service: HeleketPaymentService,
     cryptobot_service: CryptoBotPaymentService,
     lolzteam_service: LolzteamPaymentService,
     platega_service: PlategaPaymentService,
@@ -100,11 +125,17 @@ def create_payment_app(
 ) -> web.Application:
     app = web.Application()
     app["payment_service"] = service
+    app["heleket_service"] = heleket_service
     app["cryptobot_service"] = cryptobot_service
     app["lolzteam_service"] = lolzteam_service
     app["platega_service"] = platega_service
     app["repo"] = repo
     app["config"] = config
+    if config.heleket_webhook_path_token:
+        app.router.add_post(
+            f"/payments/heleket/webhook/{config.heleket_webhook_path_token}",
+            heleket_webhook,
+        )
     if config.cryptopay_webhook_path_token:
         app.router.add_post(
             f"/payments/cryptobot/webhook/{config.cryptopay_webhook_path_token}",
@@ -120,6 +151,7 @@ def create_payment_app(
             f"/payments/platega/webhook/{config.platega_webhook_path_token}",
             platega_webhook,
         )
+    app.router.add_get("/payments/heleket/success", payment_success)
     app.router.add_get("/payments/cryptobot/success", payment_success)
     app.router.add_get("/payments/lolzteam/success", payment_success)
     app.router.add_get("/payments/platega/success", payment_success)

@@ -149,11 +149,18 @@ def purchase_methods_kb(
     balance_cents: int,
     lang: str,
     *,
+    heleket_enabled: bool,
     cryptobot_enabled: bool,
     lolz_enabled: bool,
     platega_enabled: bool,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    if heleket_enabled:
+        builder.button(
+            text="Криптовалюта" if lang != "en" else "Cryptocurrency",
+            callback_data=f"buy:heleket:{product_id}",
+            icon_custom_emoji_id=premium_button_icon("heleket"),
+        )
     builder.button(
         text=tr(lang, "buy_balance_option", balance=format_money(balance_cents)),
         callback_data=f"buy:balance:{product_id}",
@@ -173,7 +180,7 @@ def purchase_methods_kb(
         )
     if platega_enabled:
         builder.button(
-            text="СБП (+ 8%)" if lang != "en" else "FSP (+ 8%)",
+            text="СБП (+8%)" if lang != "en" else "FSP (+8%)",
             callback_data=f"buy:platega:{product_id}",
             icon_custom_emoji_id=premium_button_icon("platega"),
         )
@@ -238,8 +245,21 @@ def deposit_cancel_kb(lang: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def deposit_methods_kb(lang: str, *, cryptobot_enabled: bool, lolz_enabled: bool, platega_enabled: bool) -> InlineKeyboardMarkup:
+def deposit_methods_kb(
+    lang: str,
+    *,
+    heleket_enabled: bool,
+    cryptobot_enabled: bool,
+    lolz_enabled: bool,
+    platega_enabled: bool,
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    if heleket_enabled:
+        builder.button(
+            text="Криптовалюта" if lang != "en" else "Cryptocurrency",
+            callback_data="deposit:method:heleket",
+            icon_custom_emoji_id=premium_button_icon("heleket"),
+        )
     if cryptobot_enabled:
         builder.button(
             text="CryptoBot",
