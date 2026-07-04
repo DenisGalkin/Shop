@@ -41,6 +41,16 @@ class Config:
     lolz_webhook_path_token: str
     lolz_sync_interval_seconds: int
     lolz_is_test: bool
+    platega_api_base: str
+    platega_merchant_id: str
+    platega_secret: str
+    platega_payment_method: int
+    platega_invoice_currency: str
+    platega_invoice_lifetime_minutes: int
+    platega_create_path: str
+    platega_create_path_fallback: str
+    platega_webhook_path_token: str
+    platega_sync_interval_seconds: int
     admin_web_username: str
     admin_web_password: str
     admin_web_secret: str
@@ -57,6 +67,10 @@ class Config:
     @property
     def admin_web_enabled(self) -> bool:
         return bool(self.admin_web_username and self.admin_web_password)
+
+    @property
+    def platega_enabled(self) -> bool:
+        return bool(self.platega_merchant_id and self.platega_secret)
 
 
 def _parse_admin_ids(raw_value: str) -> set[int]:
@@ -97,6 +111,11 @@ def load_config() -> Config:
         raise RuntimeError("LOLZ_WEBHOOK_SECRET must match LOLZ_MERCHANT_TOKEN according to Lolzteam webhook docs")
     if not webhook_secret:
         webhook_secret = lolz_merchant_token
+    platega_merchant_id = os.getenv("PLATEGA_MERCHANT_ID", "").strip()
+    platega_secret = os.getenv("PLATEGA_SECRET", "").strip()
+    platega_webhook_token = os.getenv("PLATEGA_WEBHOOK_PATH_TOKEN", "").strip()
+    if platega_secret and not platega_webhook_token:
+        platega_webhook_token = sha256(platega_secret.encode("utf-8")).hexdigest()
     admin_web_secret = os.getenv("ADMIN_WEB_SECRET", "").strip()
     if not admin_web_secret:
         admin_web_secret = base64.urlsafe_b64encode(sha256(bot_token.encode("utf-8")).digest()).decode("ascii")
@@ -132,6 +151,16 @@ def load_config() -> Config:
         lolz_webhook_path_token=lolz_webhook_token,
         lolz_sync_interval_seconds=int(os.getenv("LOLZ_SYNC_INTERVAL_SECONDS", "60")),
         lolz_is_test=_parse_bool(os.getenv("LOLZ_IS_TEST"), default=False),
+        platega_api_base=os.getenv("PLATEGA_API_BASE", "https://app.platega.io").strip().rstrip("/"),
+        platega_merchant_id=platega_merchant_id,
+        platega_secret=platega_secret,
+        platega_payment_method=int(os.getenv("PLATEGA_PAYMENT_METHOD", "2")),
+        platega_invoice_currency=os.getenv("PLATEGA_INVOICE_CURRENCY", "RUB").strip().upper(),
+        platega_invoice_lifetime_minutes=int(os.getenv("PLATEGA_INVOICE_LIFETIME_MINUTES", "15")),
+        platega_create_path=os.getenv("PLATEGA_CREATE_PATH", "/transaction/process").strip(),
+        platega_create_path_fallback=os.getenv("PLATEGA_CREATE_PATH_FALLBACK", "/v2/transaction/process").strip(),
+        platega_webhook_path_token=platega_webhook_token,
+        platega_sync_interval_seconds=int(os.getenv("PLATEGA_SYNC_INTERVAL_SECONDS", "60")),
         admin_web_username=os.getenv("ADMIN_WEB_USERNAME", "admin").strip(),
         admin_web_password=os.getenv("ADMIN_WEB_PASSWORD", "").strip(),
         admin_web_secret=admin_web_secret,
@@ -141,6 +170,8 @@ def load_config() -> Config:
         raise RuntimeError(
             "Lolzteam requires LOLZ_MERCHANT_ID, LOLZ_API_TOKEN, and LOLZ_MERCHANT_TOKEN to be configured together"
         )
-    if (config.cryptopay_enabled or config.lolz_enabled) and not config.public_base_url:
-        raise RuntimeError("PUBLIC_BASE_URL is required when CryptoBot or Lolzteam payments are enabled")
+    if any((platega_merchant_id, platega_secret, platega_webhook_token)) and not config.platega_enabled:
+        raise RuntimeError("Platega requires PLATEGA_MERCHANT_ID and PLATEGA_SECRET to be configured together")
+    if (config.cryptopay_enabled or config.lolz_enabled or config.platega_enabled) and not config.public_base_url:
+        raise RuntimeError("PUBLIC_BASE_URL is required when payment providers are enabled")
     return config

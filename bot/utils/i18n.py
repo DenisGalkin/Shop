@@ -177,6 +177,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "invoice_create_failed": "Не удалось создать счет. Попробуйте еще раз позже.",
         "cryptopay_not_configured": "Crypto Pay не настроен",
         "lolz_not_configured": "Lolzteam не настроен",
+        "platega_not_configured": "СБП не настроен",
         "payment_not_found": "Платёж не найден",
         "user_not_found": "Пользователь не найден",
         "product_unavailable": "Товар недоступен",
@@ -355,6 +356,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "invoice_create_failed": "Could not create an invoice. Please try again later.",
         "cryptopay_not_configured": "Crypto Pay is not configured",
         "lolz_not_configured": "Lolzteam is not configured",
+        "platega_not_configured": "FSP is not configured",
         "payment_not_found": "Payment not found",
         "user_not_found": "User not found",
         "product_unavailable": "Product is unavailable",
@@ -533,6 +535,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "invoice_create_failed": "Не вдалося створити рахунок. Спробуйте ще раз пізніше.",
         "cryptopay_not_configured": "Crypto Pay не налаштовано",
         "lolz_not_configured": "Lolzteam не налаштовано",
+        "platega_not_configured": "СБП не налаштовано",
         "payment_not_found": "Платіж не знайдено",
         "user_not_found": "Користувача не знайдено",
         "product_unavailable": "Товар недоступний",
@@ -569,6 +572,7 @@ ERROR_TRANSLATION_KEYS = {
     "No referral balance available": "no_referral_balance",
     "Crypto Pay не настроен": "cryptopay_not_configured",
     "Lolzteam не настроен": "lolz_not_configured",
+    "СБП не настроен": "platega_not_configured",
 }
 
 

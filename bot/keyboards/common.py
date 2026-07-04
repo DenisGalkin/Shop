@@ -151,6 +151,7 @@ def purchase_methods_kb(
     *,
     cryptobot_enabled: bool,
     lolz_enabled: bool,
+    platega_enabled: bool,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
@@ -169,6 +170,12 @@ def purchase_methods_kb(
             text="Lolzteam",
             callback_data=f"buy:lolz:{product_id}",
             icon_custom_emoji_id=premium_button_icon("lolz"),
+        )
+    if platega_enabled:
+        builder.button(
+            text="СБП (+ 8%)" if lang != "en" else "FSP (+ 8%)",
+            callback_data=f"buy:platega:{product_id}",
+            icon_custom_emoji_id=premium_button_icon("platega"),
         )
     builder.button(
         text=tr(lang, "cancel_purchase"),
@@ -231,7 +238,7 @@ def deposit_cancel_kb(lang: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def deposit_methods_kb(lang: str, *, cryptobot_enabled: bool, lolz_enabled: bool) -> InlineKeyboardMarkup:
+def deposit_methods_kb(lang: str, *, cryptobot_enabled: bool, lolz_enabled: bool, platega_enabled: bool) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if cryptobot_enabled:
         builder.button(
@@ -244,6 +251,12 @@ def deposit_methods_kb(lang: str, *, cryptobot_enabled: bool, lolz_enabled: bool
             text="Lolzteam",
             callback_data="deposit:method:lolzteam",
             icon_custom_emoji_id=premium_button_icon("lolz"),
+        )
+    if platega_enabled:
+        builder.button(
+            text="СБП (+ 8%)" if lang != "en" else "FSP (+ 8%)",
+            callback_data="deposit:method:platega",
+            icon_custom_emoji_id=premium_button_icon("platega"),
         )
     builder.button(text=tr(lang, "cancel"), callback_data="deposit:cancel", icon_custom_emoji_id=premium_button_icon("cancel"))
     builder.adjust(1)

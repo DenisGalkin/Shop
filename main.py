@@ -13,7 +13,8 @@ from bot.handlers import admin, user
 from bot.services.cryptobot_client import CryptoBotClient
 from bot.services.lolzteam_client import LolzteamClient
 from bot.services.payment_web import create_payment_app
-from bot.services.payments import CryptoBotPaymentService, LolzteamPaymentService, PaymentService
+from bot.services.payments import CryptoBotPaymentService, LolzteamPaymentService, PaymentService, PlategaPaymentService
+from bot.services.platega_client import PlategaClient
 from bot.storage.repository import ShopRepository
 
 
@@ -37,9 +38,18 @@ async def main() -> None:
     )
     cryptobot_client = CryptoBotClient(http_session, config.cryptopay_api_base, config.cryptopay_api_token)
     lolzteam_client = LolzteamClient(http_session, config.lolz_api_base, config.lolz_api_token)
+    platega_client = PlategaClient(
+        http_session,
+        config.platega_api_base,
+        config.platega_merchant_id,
+        config.platega_secret,
+        create_path=config.platega_create_path,
+        create_path_fallback=config.platega_create_path_fallback,
+    )
     cryptobot_service = CryptoBotPaymentService(repo=repo, config=config, client=cryptobot_client, bot=bot)
     lolzteam_service = LolzteamPaymentService(repo=repo, config=config, client=lolzteam_client, bot=bot)
-    payment_service = PaymentService(repo=repo, cryptobot=cryptobot_service, lolzteam=lolzteam_service)
+    platega_service = PlategaPaymentService(repo=repo, config=config, client=platega_client, bot=bot)
+    payment_service = PaymentService(repo=repo, cryptobot=cryptobot_service, lolzteam=lolzteam_service, platega=platega_service)
     dp = Dispatcher()
     dp["config"] = config
     dp["repo"] = repo
@@ -48,7 +58,7 @@ async def main() -> None:
     dp.include_router(user.router)
     dp.include_router(admin.router)
 
-    app = create_payment_app(payment_service, cryptobot_service, lolzteam_service, repo, config)
+    app = create_payment_app(payment_service, cryptobot_service, lolzteam_service, platega_service, repo, config)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host=config.app_host, port=config.app_port)

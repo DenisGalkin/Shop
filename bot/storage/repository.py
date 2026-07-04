@@ -39,6 +39,22 @@ def parse_datetime_to_iso(raw_value: str | None) -> str | None:
         return None
 
 
+def duration_to_expires_at_iso(raw_value: str | None, *, base_time: datetime | None = None) -> str | None:
+    if not raw_value:
+        return None
+    parts = [chunk.strip() for chunk in str(raw_value).split(":")]
+    if len(parts) != 3:
+        return None
+    try:
+        hours, minutes, seconds = (int(chunk) for chunk in parts)
+    except ValueError:
+        return None
+    if min(hours, minutes, seconds) < 0:
+        return None
+    start = (base_time or utcnow()).astimezone(timezone.utc).replace(microsecond=0)
+    return (start + timedelta(hours=hours, minutes=minutes, seconds=seconds)).isoformat()
+
+
 @dataclass(slots=True)
 class PaginationResult:
     items: list[dict[str, Any]]
@@ -1353,6 +1369,47 @@ class ShopRepository:
             return result.get("payment") or payment or {}
         return payment or {}
 
+    async def attach_platega_invoice(self, payment_id: int, invoice: dict[str, Any], *, invoice_lifetime_minutes: int) -> dict[str, Any]:
+        fallback_expires_at = utcnow() + timedelta(minutes=max(invoice_lifetime_minutes, 1))
+        expires_at_iso = (
+            parse_datetime_to_iso(invoice.get("expiresAt"))
+            or duration_to_expires_at_iso(invoice.get("expiresIn"))
+            or fallback_expires_at.replace(microsecond=0).isoformat()
+        )
+        invoice_url = invoice.get("redirect") or invoice.get("url")
+        status = str(invoice.get("status") or "PENDING").upper()
+        await self.db.execute(
+            """
+            UPDATE payments
+            SET provider_invoice_id = ?,
+                provider_invoice_url = ?,
+                provider_status = ?,
+                merchant_id = NULL,
+                external_amount = ?,
+                error_text = NULL,
+                updated_at = ?,
+                expires_at = COALESCE(?, expires_at),
+                last_checked_at = ?
+            WHERE id = ?
+            """,
+            (
+                invoice.get("transactionId"),
+                invoice_url,
+                status,
+                self._platega_external_amount(invoice),
+                utcnow_iso(),
+                expires_at_iso,
+                utcnow_iso(),
+                payment_id,
+            ),
+        )
+        await self.db.commit()
+        payment = await self.get_payment_by_id(payment_id)
+        if status == "CONFIRMED":
+            result = await self.apply_platega_invoice(invoice, invoice_lifetime_minutes=invoice_lifetime_minutes)
+            return result.get("payment") or payment or {}
+        return payment or {}
+
     async def mark_payment_failed(self, payment_id: int, error_text: str, *, release_reservation: bool) -> None:
         await self.db.execute("BEGIN IMMEDIATE")
         try:
@@ -1579,6 +1636,101 @@ class ShopRepository:
             await self.db.rollback()
             raise
 
+    async def apply_platega_invoice(self, invoice: dict[str, Any], *, invoice_lifetime_minutes: int) -> dict[str, Any]:
+        provider_invoice_id = str(invoice.get("transactionId") or invoice.get("id") or "").strip()
+        if not provider_invoice_id:
+            raise ValueError("Platega transaction id is missing")
+        await self.db.execute("BEGIN IMMEDIATE")
+        try:
+            payment_row = await self._fetchone(
+                "SELECT * FROM payments WHERE provider_invoice_id = ? OR provider_payment_id = ?",
+                (provider_invoice_id, provider_invoice_id),
+            )
+            if payment_row is None:
+                raise ValueError("Payment not found for invoice")
+            payment = dict(payment_row)
+            if payment["status"] == "completed":
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                order = None
+                if payment["order_id"]:
+                    order = await self.get_order(payment["user_id"], payment["order_id"])
+                await self.db.rollback()
+                return {"action": "already_completed", "payment": payment, "user": dict(user) if user else {}, "order": order}
+
+            fallback_expires_at = utcnow() + timedelta(minutes=max(invoice_lifetime_minutes, 1))
+            expires_at_iso = (
+                parse_datetime_to_iso(invoice.get("expiresAt"))
+                or duration_to_expires_at_iso(invoice.get("expiresIn"))
+                or payment.get("expires_at")
+                or fallback_expires_at.replace(microsecond=0).isoformat()
+            )
+            status = str(invoice.get("status") or "PENDING").upper()
+            invoice_url = invoice.get("redirect") or invoice.get("url")
+            await self.db.execute(
+                """
+                UPDATE payments
+                SET provider_invoice_id = COALESCE(?, provider_invoice_id),
+                    provider_invoice_url = COALESCE(?, provider_invoice_url),
+                    provider_status = ?,
+                    external_amount = ?,
+                    updated_at = ?,
+                    expires_at = COALESCE(?, expires_at),
+                    last_checked_at = ?
+                WHERE id = ?
+                """,
+                (
+                    provider_invoice_id,
+                    invoice_url,
+                    status,
+                    self._platega_external_amount(invoice),
+                    utcnow_iso(),
+                    expires_at_iso,
+                    utcnow_iso(),
+                    payment["id"],
+                ),
+            )
+            payment["provider_status"] = status
+            payment["provider_invoice_id"] = provider_invoice_id
+            payment["provider_payment_id"] = payment.get("provider_payment_id") or provider_invoice_id
+            payment["provider_invoice_url"] = invoice_url or payment.get("provider_invoice_url")
+            payment["external_amount"] = self._platega_external_amount(invoice)
+            payment["expires_at"] = expires_at_iso
+
+            if status == "CONFIRMED":
+                result = await self._complete_paid_payment_locked(payment)
+                await self.db.commit()
+                return result
+
+            now_iso = utcnow_iso()
+            if status in {"EXPIRED", "CANCELED", "FAILED", "CHARGEBACKED"} or (expires_at_iso and expires_at_iso <= now_iso):
+                await self.db.execute(
+                    """
+                    UPDATE payments
+                    SET status = 'expired',
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (utcnow_iso(), payment["id"]),
+                )
+                if payment.get("reserved_stock_item_id"):
+                    await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                payment["status"] = "expired"
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                await self.db.commit()
+                return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
+
+            await self.db.execute(
+                "UPDATE payments SET status = 'pending', updated_at = ? WHERE id = ?",
+                (utcnow_iso(), payment["id"]),
+            )
+            payment["status"] = "pending"
+            user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+            await self.db.commit()
+            return {"action": "pending", "payment": payment, "user": dict(user) if user else {}, "order": None}
+        except Exception:
+            await self.db.rollback()
+            raise
+
     async def mark_payment_expired_if_due(self, payment_id: int) -> dict[str, Any] | None:
         await self.db.execute("BEGIN IMMEDIATE")
         try:
@@ -1603,6 +1755,22 @@ class ShopRepository:
         except Exception:
             await self.db.rollback()
             raise
+
+    @staticmethod
+    def _platega_external_amount(invoice: dict[str, Any]) -> str:
+        payment_details = invoice.get("paymentDetails")
+        if isinstance(payment_details, dict):
+            amount = payment_details.get("amount")
+            currency = payment_details.get("currency")
+            if amount is not None and currency:
+                return f"{amount} {currency}"
+        if isinstance(payment_details, str) and payment_details.strip():
+            return payment_details.strip()
+        amount = invoice.get("amount")
+        currency = invoice.get("currency")
+        if amount is not None and currency:
+            return f"{amount} {currency}"
+        return str(amount or "")
 
     async def _complete_paid_payment_locked(self, payment: dict[str, Any]) -> dict[str, Any]:
         user_row = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))

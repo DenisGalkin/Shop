@@ -20,6 +20,7 @@ from bot.utils.premium_emoji import category_premium_emoji, premium_emoji
 
 from .cryptobot_client import CryptoBotApiError, CryptoBotClient
 from .lolzteam_client import LolzteamApiError, LolzteamClient
+from .platega_client import PlategaApiError, PlategaClient
 
 
 logger = logging.getLogger(__name__)
@@ -194,7 +195,7 @@ class BasePaymentService:
             return tr(language_code, "secure_connection_error")
         if isinstance(exc, (ClientError, TimeoutError)):
             return tr(language_code, "gateway_unavailable")
-        if isinstance(exc, (CryptoBotApiError, LolzteamApiError)):
+        if isinstance(exc, (CryptoBotApiError, LolzteamApiError, PlategaApiError)):
             message = str(exc).strip()
             if not message or len(message) > 180:
                 return tr(language_code, "invoice_create_failed")
@@ -505,6 +506,122 @@ class LolzteamPaymentService(BasePaymentService):
         return "lolz_not_configured"
 
 
+class PlategaPaymentService(BasePaymentService):
+    payment_type = "platega"
+
+    def __init__(
+        self,
+        *,
+        repo: ShopRepository,
+        config: Config,
+        client: PlategaClient,
+        bot: Bot,
+    ) -> None:
+        super().__init__(repo=repo, config=config, bot=bot)
+        self.client = client
+
+    def is_enabled(self) -> bool:
+        return self.config.platega_enabled
+
+    def build_success_url(self, payment_id: int) -> str:
+        if not self.config.public_base_url:
+            return "https://t.me/"
+        return f"{self.config.public_base_url}/payments/platega/success?payment_id={payment_id}"
+
+    def build_failed_url(self, payment_id: int) -> str:
+        if not self.config.public_base_url:
+            return "https://t.me/"
+        return f"{self.config.public_base_url}/payments/platega/success?payment_id={payment_id}&status=failed"
+
+    def build_webhook_url(self) -> str | None:
+        if not self.config.public_base_url or not self.config.platega_webhook_path_token:
+            return None
+        return f"{self.config.public_base_url}/payments/platega/webhook/{self.config.platega_webhook_path_token}"
+
+    def verify_webhook_headers(self, merchant_id: str | None, secret: str | None) -> bool:
+        expected_merchant = self.config.platega_merchant_id
+        expected_secret = self.config.platega_secret
+        if not merchant_id or not secret or not expected_merchant or not expected_secret:
+            return False
+        return hmac.compare_digest(merchant_id, expected_merchant) and hmac.compare_digest(secret, expected_secret)
+
+    async def process_webhook(
+        self,
+        payload: dict[str, Any],
+        *,
+        merchant_id: str | None,
+        secret: str | None,
+    ) -> dict[str, Any]:
+        if not self.verify_webhook_headers(merchant_id, secret):
+            raise PermissionError("Invalid Platega webhook headers")
+        transaction_id = str(payload.get("id") or "").strip()
+        if not transaction_id:
+            raise ValueError("Webhook payload is missing transaction id")
+        canonical_invoice = await self.client.get_transaction(transaction_id)
+        result = await self._apply_invoice(canonical_invoice)
+        await self._notify_on_state_change(result)
+        return result
+
+    async def _create_payment_record(self, **kwargs: Any) -> dict[str, Any]:
+        return await self.repo.create_payment(payment_type=self.payment_type, **kwargs)
+
+    async def _create_invoice(self, payment: dict[str, Any], *, user: dict[str, Any]) -> dict[str, Any]:
+        username = str(user.get("username") or "").strip().lstrip("@")
+        payload = {
+            "paymentMethod": self.config.platega_payment_method,
+            "paymentDetails": {
+                "amount": float(self.client.cents_to_amount(payment["amount_cents"])),
+                "currency": self.config.platega_invoice_currency,
+            },
+            "description": await self._build_description(payment, user.get("language_code")),
+            "return": self.build_success_url(payment["id"]),
+            "failedUrl": self.build_failed_url(payment["id"]),
+            "payload": json.dumps(
+                {
+                    "payment_db_id": payment["id"],
+                    "payment_ref": payment["provider_payment_id"],
+                    "purpose": payment["purpose"],
+                    "product_id": payment.get("product_id"),
+                    "tg_user_id": user["tg_id"],
+                },
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ),
+            "metadata": {
+                "userId": str(user["tg_id"]),
+                "userName": f"@{username}" if username else str(user["tg_id"]),
+            },
+        }
+        return await self.client.create_invoice(payload)
+
+    async def _fetch_invoice_for_payment(self, payment: dict[str, Any]) -> dict[str, Any] | None:
+        provider_invoice_id = str(payment.get("provider_invoice_id") or payment.get("provider_payment_id") or "").strip()
+        if not provider_invoice_id:
+            return None
+        return await self.client.get_transaction(provider_invoice_id)
+
+    async def _attach_invoice(self, payment_id: int, invoice: dict[str, Any]) -> dict[str, Any]:
+        return await self.repo.attach_platega_invoice(payment_id, invoice, invoice_lifetime_minutes=self.config.platega_invoice_lifetime_minutes)
+
+    async def _apply_invoice(self, invoice: dict[str, Any]) -> dict[str, Any]:
+        return await self.repo.apply_platega_invoice(invoice, invoice_lifetime_minutes=self.config.platega_invoice_lifetime_minutes)
+
+    async def _list_pending_payments(self, limit: int) -> list[dict[str, Any]]:
+        return await self.repo.list_pending_payments(self.payment_type, limit=limit)
+
+    def invoice_currency(self) -> str:
+        return self.config.platega_invoice_currency
+
+    def invoice_lifetime_seconds(self) -> int:
+        return max(self.config.platega_invoice_lifetime_minutes, 1) * 60
+
+    def sync_interval_seconds(self) -> int:
+        return self.config.platega_sync_interval_seconds
+
+    def disabled_error_key(self) -> str:
+        return "platega_not_configured"
+
+
 class PaymentService:
     def __init__(
         self,
@@ -512,13 +629,16 @@ class PaymentService:
         repo: ShopRepository,
         cryptobot: CryptoBotPaymentService,
         lolzteam: LolzteamPaymentService,
+        platega: PlategaPaymentService,
     ) -> None:
         self.repo = repo
         self.cryptobot = cryptobot
         self.lolzteam = lolzteam
+        self.platega = platega
         self._providers: dict[str, PaymentProvider] = {
             cryptobot.payment_type: cryptobot,
             lolzteam.payment_type: lolzteam,
+            platega.payment_type: platega,
         }
 
     def is_provider_enabled(self, payment_type: str) -> bool:
@@ -549,7 +669,9 @@ class PaymentService:
     async def start_background_sync(self) -> None:
         await self.cryptobot.start_background_sync()
         await self.lolzteam.start_background_sync()
+        await self.platega.start_background_sync()
 
     async def stop_background_sync(self) -> None:
         await self.cryptobot.stop_background_sync()
         await self.lolzteam.stop_background_sync()
+        await self.platega.stop_background_sync()

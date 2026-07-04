@@ -293,6 +293,7 @@ async def buy_menu_handler(callback: CallbackQuery, repo: ShopRepository, config
             lang,
             cryptobot_enabled=config.cryptopay_enabled,
             lolz_enabled=config.lolz_enabled,
+            platega_enabled=config.platega_enabled,
         ),
     )
 
@@ -345,6 +346,7 @@ async def buy_balance_handler(callback: CallbackQuery, repo: ShopRepository) -> 
 
 @router.callback_query(F.data.startswith("buy:crypto:"))
 @router.callback_query(F.data.startswith("buy:lolz:"))
+@router.callback_query(F.data.startswith("buy:platega:"))
 async def buy_invoice_handler(
     callback: CallbackQuery,
     repo: ShopRepository,
@@ -353,7 +355,15 @@ async def buy_invoice_handler(
     user = await repo.get_user_by_tg_id(callback.from_user.id)
     lang = _user_language(user)
     _, payment_method, product_id_raw = callback.data.split(":")
-    payment_type = "cryptobot" if payment_method == "crypto" else "lolzteam"
+    payment_type_map = {
+        "crypto": "cryptobot",
+        "lolz": "lolzteam",
+        "platega": "platega",
+    }
+    payment_type = payment_type_map.get(payment_method)
+    if not payment_type:
+        await callback.answer(tr(lang, "payment_method_unavailable"), show_alert=True)
+        return
     product_id = int(product_id_raw)
     product = await repo.get_product(product_id)
     if not product:
@@ -458,7 +468,7 @@ async def order_detail_handler(callback: CallbackQuery, repo: ShopRepository) ->
 async def deposit_start_handler(callback: CallbackQuery, state: FSMContext, config: Config, repo: ShopRepository) -> None:
     user = await repo.get_user_by_tg_id(callback.from_user.id)
     lang = _user_language(user)
-    if not (config.cryptopay_enabled or config.lolz_enabled):
+    if not (config.cryptopay_enabled or config.lolz_enabled or config.platega_enabled):
         await callback.answer(tr(lang, "deposit_unavailable"), show_alert=True)
         return
     await state.set_state(UserStates.waiting_deposit_amount)
@@ -498,6 +508,7 @@ async def deposit_amount_handler(message: Message, state: FSMContext, config: Co
             lang,
             cryptobot_enabled=config.cryptopay_enabled,
             lolz_enabled=config.lolz_enabled,
+            platega_enabled=config.platega_enabled,
         ),
     )
 
@@ -517,7 +528,7 @@ async def deposit_method_handler(
         await callback.answer(tr(lang, "enter_amount_first"), show_alert=True)
         return
     method = callback.data.split(":")[2]
-    if method not in {"cryptobot", "lolzteam"}:
+    if method not in {"cryptobot", "lolzteam", "platega"}:
         await callback.answer(tr(lang, "payment_method_unavailable"), show_alert=True)
         return
     try:

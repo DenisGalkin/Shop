@@ -11,7 +11,7 @@ from bot.config import Config
 from bot.storage.repository import ShopRepository
 
 from .admin_web import setup_admin_routes
-from .payments import CryptoBotPaymentService, LolzteamPaymentService, PaymentService
+from .payments import CryptoBotPaymentService, LolzteamPaymentService, PaymentService, PlategaPaymentService
 
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,26 @@ async def lolzteam_webhook(request: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
 
+async def platega_webhook(request: web.Request) -> web.Response:
+    service: PlategaPaymentService = request.app["platega_service"]
+    merchant_id = request.headers.get("X-MerchantId")
+    secret = request.headers.get("X-Secret")
+    raw_body = await request.read()
+    try:
+        payload: dict[str, Any] = json.loads(raw_body.decode("utf-8"))
+        await service.process_webhook(payload, merchant_id=merchant_id, secret=secret)
+    except PermissionError:
+        logger.warning("Rejected Platega webhook due to invalid X-MerchantId or X-Secret")
+        raise web.HTTPForbidden(text="forbidden")
+    except ValueError:
+        logger.exception("Rejected malformed Platega webhook payload")
+        raise web.HTTPBadRequest(text="bad request")
+    except Exception:
+        logger.exception("Platega webhook processing failed")
+        raise web.HTTPInternalServerError(text="error")
+    return web.json_response({"ok": True})
+
+
 async def payment_success(request: web.Request) -> web.Response:
     payment_id = request.query.get("payment_id", "")
     safe_payment_id = html.escape(payment_id or "—", quote=True)
@@ -74,6 +94,7 @@ def create_payment_app(
     service: PaymentService,
     cryptobot_service: CryptoBotPaymentService,
     lolzteam_service: LolzteamPaymentService,
+    platega_service: PlategaPaymentService,
     repo: ShopRepository,
     config: Config,
 ) -> web.Application:
@@ -81,6 +102,7 @@ def create_payment_app(
     app["payment_service"] = service
     app["cryptobot_service"] = cryptobot_service
     app["lolzteam_service"] = lolzteam_service
+    app["platega_service"] = platega_service
     app["repo"] = repo
     app["config"] = config
     if config.cryptopay_webhook_path_token:
@@ -93,7 +115,13 @@ def create_payment_app(
             f"/payments/lolzteam/callback/{config.lolz_webhook_path_token}",
             lolzteam_webhook,
         )
+    if config.platega_webhook_path_token:
+        app.router.add_post(
+            f"/payments/platega/webhook/{config.platega_webhook_path_token}",
+            platega_webhook,
+        )
     app.router.add_get("/payments/cryptobot/success", payment_success)
     app.router.add_get("/payments/lolzteam/success", payment_success)
+    app.router.add_get("/payments/platega/success", payment_success)
     setup_admin_routes(app)
     return app
