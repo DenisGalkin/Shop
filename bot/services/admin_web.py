@@ -138,6 +138,9 @@ def _serialize_payment(payment: dict[str, Any]) -> dict[str, Any]:
         "product_title": payment.get("product_title"),
         "payment_type": payment["payment_type"],
         "provider_status": payment["provider_status"],
+        "provider_payment_id": payment.get("provider_payment_id"),
+        "provider_invoice_id": payment.get("provider_invoice_id"),
+        "provider_invoice_url": payment.get("provider_invoice_url"),
         "created_at": payment["created_at"],
         "created_label": format_date(payment["created_at"]),
     }
@@ -183,7 +186,6 @@ def _serialize_category(category: dict[str, Any]) -> dict[str, Any]:
         "id": category["id"],
         "slug": category["slug"],
         "title": category["title"],
-        "description": category["description"] or "",
         "premium_emoji_id": category.get("premium_emoji_id") or "",
         "sort_order": category["sort_order"],
         "is_active": bool(category["is_active"]),
@@ -200,8 +202,6 @@ def _serialize_product(product: dict[str, Any]) -> dict[str, Any]:
         "category_title": product["category_title"],
         "title": product["title"],
         "title_i18n": product.get("title_i18n") or {},
-        "internal_name": product["internal_name"],
-        "internal_name_i18n": product.get("internal_name_i18n") or {},
         "description": product["description"],
         "description_i18n": product.get("description_i18n") or {},
         "important_info": product["important_info"],
@@ -371,11 +371,10 @@ async def admin_categories(request: web.Request) -> web.Response:
     title = str(payload.get("title", "")).strip()
     if not title:
         return _json_error("Название категории обязательно")
-    description = str(payload.get("description", "")).strip()
     premium_emoji_id = str(payload.get("premium_emoji_id", "")).strip() or None
     sort_order = int(payload.get("sort_order") or 0)
-    category_id = await repo.create_category(title, description, premium_emoji_id)
-    await repo.update_category(category_id, title, description, sort_order, premium_emoji_id)
+    category_id = await repo.create_category(title, premium_emoji_id)
+    await repo.update_category(category_id, title, sort_order, premium_emoji_id)
     category = await repo.get_category(category_id)
     return web.json_response({"ok": True, "item": _serialize_category(category or {})})
 
@@ -391,10 +390,9 @@ async def admin_category_update(request: web.Request) -> web.Response:
     title = str(payload.get("title", category["title"])).strip()
     if not title:
         return _json_error("Название категории обязательно")
-    description = str(payload.get("description", category["description"] or "")).strip()
     premium_emoji_id = str(payload.get("premium_emoji_id", category.get("premium_emoji_id") or "")).strip() or None
     sort_order = int(payload.get("sort_order", category["sort_order"]) or 0)
-    await repo.update_category(category_id, title, description, sort_order, premium_emoji_id)
+    await repo.update_category(category_id, title, sort_order, premium_emoji_id)
     updated = await repo.get_category(category_id)
     return web.json_response({"ok": True, "item": _serialize_category(updated or {})})
 
@@ -420,24 +418,20 @@ async def admin_products(request: web.Request) -> web.Response:
         return web.json_response({"ok": True, "items": products, "categories": categories})
     payload = await _get_json(request)
     title_i18n = _parse_localized_field(payload, "title")
-    internal_name_i18n = _parse_localized_field(payload, "internal_name")
     description_i18n = _parse_localized_field(payload, "description")
     important_info_i18n = _parse_localized_field(payload, "important_info")
     title = _primary_localized_value(title_i18n)
-    internal_name = _primary_localized_value(internal_name_i18n, title) or title
     category_id = int(payload.get("category_id") or 0)
     if not title or not category_id:
         return _json_error("Заполните название и категорию")
     product_id = await repo.create_product(
         category_id=category_id,
         title=title,
-        internal_name=internal_name,
         price_cents=parse_money_to_cents(str(payload.get("price", "0"))),
         description=_primary_localized_value(description_i18n),
         important_info=_primary_localized_value(important_info_i18n),
         warranty_label=str(payload.get("warranty_label", "")).strip(),
         title_i18n=title_i18n,
-        internal_name_i18n=internal_name_i18n,
         description_i18n=description_i18n,
         important_info_i18n=important_info_i18n,
     )
@@ -445,14 +439,12 @@ async def admin_products(request: web.Request) -> web.Response:
         product_id,
         category_id=category_id,
         title=title,
-        internal_name=internal_name,
         description=_primary_localized_value(description_i18n),
         important_info=_primary_localized_value(important_info_i18n),
         price_cents=parse_money_to_cents(str(payload.get("price", "0"))),
         warranty_label=str(payload.get("warranty_label", "")).strip(),
         sort_order=int(payload.get("sort_order") or 0),
         title_i18n=title_i18n,
-        internal_name_i18n=internal_name_i18n,
         description_i18n=description_i18n,
         important_info_i18n=important_info_i18n,
     )
@@ -469,12 +461,6 @@ async def admin_product_update(request: web.Request) -> web.Response:
         return _json_error("Товар не найден", status=404)
     payload = await _get_json(request)
     title_i18n = _parse_localized_field(payload, "title", fallback=existing["title"], existing=existing.get("title_i18n"))
-    internal_name_i18n = _parse_localized_field(
-        payload,
-        "internal_name",
-        fallback=existing["internal_name"],
-        existing=existing.get("internal_name_i18n"),
-    )
     description_i18n = _parse_localized_field(
         payload,
         "description",
@@ -491,14 +477,12 @@ async def admin_product_update(request: web.Request) -> web.Response:
         product_id,
         category_id=int(payload.get("category_id", existing["category_id"])),
         title=_primary_localized_value(title_i18n, existing["title"]),
-        internal_name=_primary_localized_value(internal_name_i18n, existing["internal_name"]),
         description=_primary_localized_value(description_i18n, existing["description"]),
         important_info=_primary_localized_value(important_info_i18n, existing["important_info"]),
         price_cents=parse_money_to_cents(str(payload.get("price", existing["price_cents"] / 100))),
         warranty_label=str(payload.get("warranty_label", existing["warranty_label"])).strip(),
         sort_order=int(payload.get("sort_order", existing["sort_order"]) or 0),
         title_i18n=title_i18n,
-        internal_name_i18n=internal_name_i18n,
         description_i18n=description_i18n,
         important_info_i18n=important_info_i18n,
     )
@@ -645,8 +629,6 @@ async def admin_asset(request: web.Request) -> web.FileResponse:
 
 
 def setup_admin_routes(app: web.Application) -> None:
-    app.router.add_get("/admin", admin_shell)
-    app.router.add_get("/admin/assets/{filename:.+}", admin_asset)
     app.router.add_post("/admin/api/login", admin_login)
     app.router.add_post("/admin/api/logout", admin_logout)
     app.router.add_get("/admin/api/session", admin_session)

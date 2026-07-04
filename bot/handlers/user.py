@@ -216,7 +216,7 @@ async def product_card_handler(callback: CallbackQuery, repo: ShopRepository) ->
         lang,
         "product_card_text",
         category_emoji=_category_emoji(product),
-        internal_name=html.quote(product["internal_name"]),
+        product_title=html.quote(product["title"]),
         catalog_emoji=premium_emoji("catalog"),
         category_title=html.quote(product["category_title"]),
         price_emoji=premium_emoji("price"),

@@ -60,7 +60,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "stock_notifications_enabled": "Уведомления включены",
         "stock_notifications_disabled": "Уведомления отключены",
         "product_card_text": (
-            "<b>{category_emoji} {internal_name}</b>\n\n"
+            "<b>{category_emoji} {product_title}</b>\n\n"
             "{catalog_emoji} Категория: {category_title}\n"
             "{price_emoji} Стоимость: {price}\n"
             "{stock_emoji} В наличии: {stock_count} шт.\n\n"
@@ -240,7 +240,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "stock_notifications_enabled": "Notifications enabled",
         "stock_notifications_disabled": "Notifications disabled",
         "product_card_text": (
-            "<b>{category_emoji} {internal_name}</b>\n\n"
+            "<b>{category_emoji} {product_title}</b>\n\n"
             "{catalog_emoji} Category: {category_title}\n"
             "{price_emoji} Price: {price}\n"
             "{stock_emoji} In stock: {stock_count} pcs.\n\n"
@@ -420,7 +420,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "stock_notifications_enabled": "Сповіщення увімкнено",
         "stock_notifications_disabled": "Сповіщення вимкнено",
         "product_card_text": (
-            "<b>{category_emoji} {internal_name}</b>\n\n"
+            "<b>{category_emoji} {product_title}</b>\n\n"
             "{catalog_emoji} Категорія: {category_title}\n"
             "{price_emoji} Вартість: {price}\n"
             "{stock_emoji} У наявності: {stock_count} шт.\n\n"

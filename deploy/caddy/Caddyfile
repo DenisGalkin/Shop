@@ -5,7 +5,17 @@
 shop.vexnd.com {
     encode zstd gzip
 
-    reverse_proxy bot:{$APP_PORT}
+    handle /admin/api/* {
+        reverse_proxy bot:{$APP_PORT}
+    }
+
+    handle /admin* {
+        reverse_proxy admin:3000
+    }
+
+    handle {
+        reverse_proxy bot:{$APP_PORT}
+    }
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

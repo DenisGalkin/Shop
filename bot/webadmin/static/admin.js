@@ -23,7 +23,6 @@ function normalizeLocalizedFields(values = {}, fallback = "") {
 const createEmptyCategoryForm = () => ({
   id: "",
   title: "",
-  description: "",
   premium_emoji_id: "",
   sort_order: "0",
 });
@@ -33,7 +32,6 @@ const createEmptyProductForm = (categories = []) => ({
   category_id: categories[0] ? String(categories[0].id) : "",
   active_locale: "ru",
   title_i18n: createEmptyLocalizedFields(),
-  internal_name_i18n: createEmptyLocalizedFields(),
   price: "",
   warranty_label: "",
   sort_order: "0",
@@ -300,9 +298,6 @@ function syncProductFormDraft() {
     title_i18n: Object.fromEntries(
       PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`title_i18n_${code}`) ?? state.forms.product.title_i18n?.[code] ?? "")])
     ),
-    internal_name_i18n: Object.fromEntries(
-      PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`internal_name_i18n_${code}`) ?? state.forms.product.internal_name_i18n?.[code] ?? "")])
-    ),
     description_i18n: Object.fromEntries(
       PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`description_i18n_${code}`) ?? state.forms.product.description_i18n?.[code] ?? "")])
     ),
@@ -371,7 +366,6 @@ function editCategory(categoryId) {
   state.forms.category = {
     id: String(category.id),
     title: category.title,
-    description: category.description,
     premium_emoji_id: category.premium_emoji_id || "",
     sort_order: String(category.sort_order),
   };
@@ -383,7 +377,6 @@ async function submitCategory(event) {
   const form = new FormData(event.currentTarget);
   const payload = {
     title: form.get("title"),
-    description: form.get("description"),
     premium_emoji_id: form.get("premium_emoji_id"),
     sort_order: form.get("sort_order"),
   };
@@ -434,7 +427,6 @@ function editProduct(productId) {
     category_id: String(product.category_id),
     active_locale: state.forms.product.active_locale || "ru",
     title_i18n: normalizeLocalizedFields(product.title_i18n, product.title),
-    internal_name_i18n: normalizeLocalizedFields(product.internal_name_i18n, product.internal_name),
     price: (product.price_cents / 100).toFixed(2),
     warranty_label: product.warranty_label,
     sort_order: String(product.sort_order),
@@ -453,7 +445,6 @@ async function submitProduct(event) {
     warranty_label: form.get("warranty_label"),
     sort_order: form.get("sort_order"),
     title_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`title_i18n_${code}`) || "").trim()])),
-    internal_name_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`internal_name_i18n_${code}`) || "").trim()])),
     description_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`description_i18n_${code}`) || "").trim()])),
     important_info_i18n: Object.fromEntries(PRODUCT_LOCALES.map(({ code }) => [code, String(form.get(`important_info_i18n_${code}`) || "").trim()])),
   };
@@ -626,7 +617,7 @@ function getFilteredProducts() {
   const search = state.filters.productsSearch.trim().toLowerCase();
   return state.products.filter((product) => {
     if (search) {
-      const haystack = [product.title, product.internal_name, product.category_title].join(" ").toLowerCase();
+      const haystack = [product.title, product.category_title].join(" ").toLowerCase();
       if (!haystack.includes(search)) return false;
     }
     if (state.filters.productsCategoryId && String(product.category_id) !== state.filters.productsCategoryId) {
@@ -684,11 +675,14 @@ function renderLogin() {
 }
 
 function renderMetricCard(title, value, footLeft, footRight, tone = "") {
+  const footer = footLeft || footRight
+    ? `<div class="metric-foot"><span>${escapeHtml(footLeft || "")}</span><span>${escapeHtml(footRight || "")}</span></div>`
+    : "";
   return `
     <section class="panel metric-card ${tone}">
       <strong>${escapeHtml(title)}</strong>
       <div class="value">${escapeHtml(value)}</div>
-      <div class="metric-foot"><span>${escapeHtml(footLeft || "")}</span><span>${escapeHtml(footRight || "")}</span></div>
+      ${footer}
     </section>
   `;
 }
@@ -750,6 +744,12 @@ function formatPaymentProvider(value) {
   return map[value] || value || "—";
 }
 
+function formatProviderStatusLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "—";
+  return raw.replaceAll("_", " ").toLowerCase();
+}
+
 function getPaymentStatusMeta(payment) {
   if (payment.purpose === "deposit" && payment.status === "completed") {
     return { label: "deposit", tone: "neutral" };
@@ -787,19 +787,22 @@ function renderOrderRow(order) {
 function renderPaymentRow(payment) {
   const status = getPaymentStatusMeta(payment);
   const purposeLabel = payment.product_title || payment.purpose || "Платеж";
+  const buyerName = payment.buyer_name || "Без имени";
+  const buyerId = payment.buyer_tg_id || "—";
   return `
-    <article class="list-row">
-      <div>
-        <strong>#${payment.id} · ${escapeHtml(formatPaymentProvider(payment.payment_type))}</strong>
-        <small>${escapeHtml(payment.created_label || "—")} · ${escapeHtml(purposeLabel)}</small>
+    <article class="list-row payment-row">
+      <div class="payment-main">
+        <strong class="payment-title">#${payment.id} · ${escapeHtml(formatPaymentProvider(payment.payment_type))}</strong>
+        <small class="payment-meta">${escapeHtml(payment.created_label || "—")} · ${escapeHtml(purposeLabel)}</small>
       </div>
-      <div>
+      <div class="payment-amount">
         <strong>${escapeHtml(payment.amount_label || "—")}</strong>
-        <small>${escapeHtml(payment.buyer_name || "Без имени")} · ID ${escapeHtml(payment.buyer_tg_id || "—")}</small>
+        <small>${escapeHtml(buyerName)}</small>
+        <span class="payment-secondary">ID ${escapeHtml(buyerId)}</span>
       </div>
-      <div class="stock-actions">
+      <div class="payment-status">
         <span class="chip ${status.tone}">${escapeHtml(status.label)}</span>
-        <span>${escapeHtml(payment.provider_status || "—")}</span>
+        <span class="payment-secondary">${escapeHtml(formatProviderStatusLabel(payment.provider_status))}</span>
       </div>
     </article>
   `;
@@ -1255,10 +1258,10 @@ function renderProductsTab() {
         `<button class="primary-button" onclick="openCreateProduct()">Новый товар</button>`
       )}
       <div class="stats-grid compact">
-        ${renderMetricCard("Всего товаров", String(metrics.total), "Все позиции", "Каталог")}
-        ${renderMetricCard("Активных", String(metrics.active), "Видимы на витрине", "Готовы к продаже", "success")}
-        ${renderMetricCard("Без ключей", String(metrics.outOfStock), "Активные товары", "Требуют пополнения", "warn")}
-        ${renderMetricCard("Скрытых", String(metrics.hidden), "Не видны клиенту", "Архив/паузa", "neutral")}
+        ${renderMetricCard("Всего товаров", String(metrics.total))}
+        ${renderMetricCard("Активных", String(metrics.active), "", "", "success")}
+        ${renderMetricCard("Без ключей", String(metrics.outOfStock), "", "", "warn")}
+        ${renderMetricCard("Скрытых", String(metrics.hidden), "", "", "neutral")}
       </div>
       <form id="catalog-products-filters" class="toolbar dense">
         <div class="field grow-2">
@@ -1302,7 +1305,6 @@ function renderProductsTab() {
             <td>
               <div class="cell-primary">
                 <strong>${escapeHtml(product.title)}</strong>
-                <small>${escapeHtml(product.internal_name || "Без внутреннего имени")}</small>
               </div>
             </td>
             <td>${escapeHtml(product.category_title)}</td>
@@ -1346,7 +1348,6 @@ function renderCategoriesTab() {
             <td>
               <div class="cell-primary">
                 <strong>${escapeHtml(category.title)}</strong>
-                <small>${escapeHtml(category.description || "Без описания")}</small>
               </div>
             </td>
             <td class="mono">${escapeHtml(category.premium_emoji_id || "—")}</td>
@@ -1391,7 +1392,6 @@ function renderStockTab() {
             <td>
               <div class="cell-primary">
                 <strong>${escapeHtml(product.title)}</strong>
-                <small>${escapeHtml(product.internal_name || "Без внутреннего имени")}</small>
               </div>
             </td>
             <td>${escapeHtml(product.category_title)}</td>
@@ -1425,7 +1425,6 @@ function renderArchiveTab() {
         <td>
           <div class="cell-primary">
             <strong>${escapeHtml(product.title)}</strong>
-            <small>${escapeHtml(product.internal_name || "Без внутреннего имени")}</small>
           </div>
         </td>
         <td>${escapeHtml(product.category_title)}</td>
@@ -1453,7 +1452,6 @@ function renderArchiveTab() {
         <td>
           <div class="cell-primary">
             <strong>${escapeHtml(category.title)}</strong>
-            <small>${escapeHtml(category.description || "Без описания")}</small>
           </div>
         </td>
         <td>${category.products_count}</td>
@@ -1631,31 +1629,6 @@ function renderSettings() {
           </div>
         </form>
       </section>
-      <aside class="stack">
-        <section class="panel">
-          ${renderSectionHeader("О панели", "Админка работает в том же приложении, что и бот.")}
-          <div class="mini-list">
-            <div class="mini-item">
-              <div>
-                <strong>Единый deploy</strong>
-                <small>Бот, webhook и web-admin запускаются вместе.</small>
-              </div>
-            </div>
-            <div class="mini-item">
-              <div>
-                <strong>Прямой доступ к данным</strong>
-                <small>Каталог, склад, пользователи и платежи работают на текущей SQLite базе.</small>
-              </div>
-            </div>
-            <div class="mini-item">
-              <div>
-                <strong>Без отдельного фронтенда</strong>
-                <small>Статика встроена в репозиторий и отдается напрямую через aiohttp.</small>
-              </div>
-            </div>
-          </div>
-        </section>
-      </aside>
     </div>
   `;
 }
@@ -1758,10 +1731,6 @@ function renderModal() {
               <label>Название</label>
               <input name="title" value="${escapeHtml(state.forms.category.title)}" required />
             </div>
-            <div class="field full">
-              <label>Описание</label>
-              <textarea name="description" rows="4">${escapeHtml(state.forms.category.description)}</textarea>
-            </div>
             <div class="field">
               <label>Emoji ID</label>
               <input class="mono" name="premium_emoji_id" value="${escapeHtml(state.forms.category.premium_emoji_id)}" placeholder="Можно оставить пустым" />
@@ -1806,10 +1775,6 @@ function renderModal() {
           <div class="field full">
             <label>Название ${label}</label>
             <input name="title_i18n_${code}" value="${escapeHtml(state.forms.product.title_i18n?.[code] || "")}" ${code === "ru" ? "required" : ""} />
-          </div>
-          <div class="field full">
-            <label>Внутреннее название ${label}</label>
-            <input name="internal_name_i18n_${code}" value="${escapeHtml(state.forms.product.internal_name_i18n?.[code] || "")}" />
           </div>
           <div class="field full">
             <label>Описание ${label}</label>
@@ -1858,7 +1823,7 @@ function renderModal() {
               <p class="field-note">Заполните RU, EN и UA. Пользователь увидит язык своего интерфейса, а если перевод пустой, сработает fallback.</p>
               ${localizationPanels}
             </div>
-            <div class="field full form-actions">
+            <div class="field full form-actions product-form-actions">
               ${localizationTabs}
               <button class="primary-button" type="submit">${state.forms.product.id ? "Сохранить" : "Создать"}</button>
             </div>

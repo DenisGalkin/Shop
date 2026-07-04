@@ -103,7 +103,7 @@ table {
 
 .nav {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -123,8 +123,8 @@ table {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 42px;
-  min-height: 42px;
+  height: 46px;
+  min-height: 46px;
   padding: 0 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.02);
@@ -548,6 +548,57 @@ button:disabled {
   align-items: center;
 }
 
+.payment-row {
+  grid-template-columns: minmax(0, 1.45fr) minmax(180px, 0.8fr) minmax(120px, 0.45fr);
+  gap: 16px;
+  padding: 14px 18px;
+  border-color: #d6dfeb;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.03);
+}
+
+.payment-main,
+.payment-amount,
+.payment-status {
+  min-width: 0;
+}
+
+.payment-title,
+.payment-amount strong {
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.payment-meta,
+.payment-amount small,
+.payment-secondary {
+  display: block;
+  margin-top: 5px;
+}
+
+.payment-amount {
+  text-align: right;
+}
+
+.payment-amount strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.payment-status {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  text-align: right;
+}
+
+.payment-secondary {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .list-row strong,
 .mini-item strong,
 .cell-primary strong {
@@ -676,6 +727,10 @@ textarea {
   align-items: flex-end;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.product-form-actions {
+  justify-content: flex-start;
 }
 
 .chip-row,
@@ -983,7 +1038,7 @@ textarea {
 .stock-draft-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 12px;
 }
 
@@ -1104,6 +1159,18 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .payment-row {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+  }
+
+  .payment-status {
+    grid-column: 1 / -1;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    justify-items: start;
+    text-align: left;
+  }
+
   .stock-draft-actions {
     align-items: stretch;
     flex-direction: column;
@@ -1147,10 +1214,22 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .payment-row {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .payment-amount,
   .buyer-stats,
   .stock-actions {
     justify-items: start;
     text-align: left;
+  }
+
+  .payment-status {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .drawer,

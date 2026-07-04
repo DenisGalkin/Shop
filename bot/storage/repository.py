@@ -13,7 +13,7 @@ from bot.config import Config
 from bot.utils.i18n import SUPPORTED_LANGUAGES, normalize_language_code, pick_localized_text
 
 
-PRODUCT_LOCALIZED_FIELDS = ("title", "internal_name", "description", "important_info")
+PRODUCT_LOCALIZED_FIELDS = ("title", "description", "important_info")
 
 
 def utcnow() -> datetime:
@@ -127,7 +127,6 @@ class ShopRepository:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 slug TEXT NOT NULL UNIQUE,
                 title TEXT NOT NULL,
-                description TEXT,
                 premium_emoji_id TEXT,
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 is_active INTEGER NOT NULL DEFAULT 1,
@@ -140,8 +139,6 @@ class ShopRepository:
                 slug TEXT NOT NULL UNIQUE,
                 title TEXT NOT NULL,
                 title_i18n TEXT NOT NULL DEFAULT '{}',
-                internal_name TEXT NOT NULL,
-                internal_name_i18n TEXT NOT NULL DEFAULT '{}',
                 description TEXT NOT NULL DEFAULT '',
                 description_i18n TEXT NOT NULL DEFAULT '{}',
                 important_info TEXT NOT NULL DEFAULT '',
@@ -253,8 +250,8 @@ class ShopRepository:
         await self.db.commit()
 
     async def _migrate_schema(self) -> None:
+        await self._drop_legacy_catalog_columns()
         await self._ensure_column("products", "title_i18n", "TEXT NOT NULL DEFAULT '{}'")
-        await self._ensure_column("products", "internal_name_i18n", "TEXT NOT NULL DEFAULT '{}'")
         await self._ensure_column("products", "description_i18n", "TEXT NOT NULL DEFAULT '{}'")
         await self._ensure_column("products", "important_info_i18n", "TEXT NOT NULL DEFAULT '{}'")
         await self._ensure_column("categories", "premium_emoji_id", "TEXT")
@@ -294,6 +291,9 @@ class ShopRepository:
         )
         await self.db.execute(
             "CREATE INDEX IF NOT EXISTS idx_payments_pending_sync ON payments(payment_type, status, expires_at, last_checked_at)"
+        )
+        await self.db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id, is_active, sort_order)"
         )
         category_default_icons = {
             "claude": "5341790816199286662",
@@ -381,8 +381,7 @@ class ShopRepository:
     async def _backfill_product_localizations(self) -> None:
         rows = await self._fetchall(
             """
-            SELECT id, title, title_i18n, internal_name, internal_name_i18n,
-                   description, description_i18n, important_info, important_info_i18n
+            SELECT id, title, title_i18n, description, description_i18n, important_info, important_info_i18n
             FROM products
             """
         )
@@ -400,19 +399,92 @@ class ShopRepository:
                     """
                     UPDATE products
                     SET title_i18n = ?,
-                        internal_name_i18n = ?,
                         description_i18n = ?,
                         important_info_i18n = ?
                     WHERE id = ?
                     """,
                     (
                         updates.get("title_i18n", str(row["title_i18n"] or "{}")),
-                        updates.get("internal_name_i18n", str(row["internal_name_i18n"] or "{}")),
                         updates.get("description_i18n", str(row["description_i18n"] or "{}")),
                         updates.get("important_info_i18n", str(row["important_info_i18n"] or "{}")),
                         row["id"],
                     ),
                 )
+
+    async def _drop_legacy_catalog_columns(self) -> None:
+        category_columns = {row["name"] for row in await self._fetchall("PRAGMA table_info(categories)")}
+        if "description" in category_columns:
+            await self._rebuild_categories_without_description()
+        product_columns = {row["name"] for row in await self._fetchall("PRAGMA table_info(products)")}
+        if "internal_name" in product_columns or "internal_name_i18n" in product_columns:
+            await self._rebuild_products_without_internal_name()
+
+    async def _rebuild_categories_without_description(self) -> None:
+        await self.db.execute("PRAGMA foreign_keys=OFF")
+        await self.db.execute("ALTER TABLE categories RENAME TO categories_legacy")
+        await self.db.execute(
+            """
+            CREATE TABLE categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                premium_emoji_id TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        await self.db.execute(
+            """
+            INSERT INTO categories(id, slug, title, premium_emoji_id, sort_order, is_active, created_at)
+            SELECT id, slug, title, premium_emoji_id, sort_order, is_active, created_at
+            FROM categories_legacy
+            """
+        )
+        await self.db.execute("DROP TABLE categories_legacy")
+        await self.db.execute("PRAGMA foreign_keys=ON")
+
+    async def _rebuild_products_without_internal_name(self) -> None:
+        await self.db.execute("PRAGMA foreign_keys=OFF")
+        await self.db.execute("ALTER TABLE products RENAME TO products_legacy")
+        await self.db.execute(
+            """
+            CREATE TABLE products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_id INTEGER NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                title_i18n TEXT NOT NULL DEFAULT '{}',
+                description TEXT NOT NULL DEFAULT '',
+                description_i18n TEXT NOT NULL DEFAULT '{}',
+                important_info TEXT NOT NULL DEFAULT '',
+                important_info_i18n TEXT NOT NULL DEFAULT '{}',
+                price_cents INTEGER NOT NULL,
+                warranty_label TEXT NOT NULL DEFAULT '',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (category_id) REFERENCES categories(id)
+            )
+            """
+        )
+        await self.db.execute(
+            """
+            INSERT INTO products(
+                id, category_id, slug, title, title_i18n, description, description_i18n,
+                important_info, important_info_i18n, price_cents, warranty_label, is_active,
+                sort_order, created_at
+            )
+            SELECT
+                id, category_id, slug, title, title_i18n, description, description_i18n,
+                important_info, important_info_i18n, price_cents, warranty_label, is_active,
+                sort_order, created_at
+            FROM products_legacy
+            """
+        )
+        await self.db.execute("DROP TABLE products_legacy")
+        await self.db.execute("PRAGMA foreign_keys=ON")
 
     async def _ensure_column(self, table_name: str, column_name: str, ddl: str) -> None:
         columns = await self._fetchall(f"PRAGMA table_info({table_name})")
@@ -445,17 +517,17 @@ class ShopRepository:
             return
         now = utcnow_iso()
         categories = [
-            ("claude", "Claude", "Подписки и ключи Anthropic Claude", "5341790816199286662", 10),
-            ("chatgpt", "ChatGPT", "Подписки OpenAI и сопутствующие решения", "5341790652990530125", 20),
-            ("grok", "Grok AI", "Ключи и доступы Grok AI", "5341553317392720144", 30),
+            ("claude", "Claude", "5341790816199286662", 10),
+            ("chatgpt", "ChatGPT", "5341790652990530125", 20),
+            ("grok", "Grok AI", "5341553317392720144", 30),
         ]
-        for slug, title, description, premium_emoji_id, sort_order in categories:
+        for slug, title, premium_emoji_id, sort_order in categories:
             await self.db.execute(
                 """
-                INSERT INTO categories(slug, title, description, premium_emoji_id, sort_order, created_at)
-                VALUES(?, ?, ?, ?, ?, ?)
+                INSERT INTO categories(slug, title, premium_emoji_id, sort_order, created_at)
+                VALUES(?, ?, ?, ?, ?)
                 """,
-                (slug, title, description, premium_emoji_id, sort_order, now),
+                (slug, title, premium_emoji_id, sort_order, now),
             )
         await self.db.commit()
 
@@ -465,7 +537,6 @@ class ShopRepository:
                 "category_slug": "claude",
                 "slug": "claude-max-5x",
                 "title": "CDK Claude Max 5x",
-                "internal_name": "CDK Claude Max 5x (No Warranty)",
                 "description": (
                     "CDK (ключ) для самостоятельной активации подписки по session key "
                     "на любой аккаунт без активной подписки."
@@ -475,11 +546,6 @@ class ShopRepository:
                     "качественные приватные прокси или VPN."
                 ),
                 "title_i18n": {"ru": "CDK Claude Max 5x", "en": "CDK Claude Max 5x", "uk": "CDK Claude Max 5x"},
-                "internal_name_i18n": {
-                    "ru": "CDK Claude Max 5x (No Warranty)",
-                    "en": "CDK Claude Max 5x (No Warranty)",
-                    "uk": "CDK Claude Max 5x (Без гарантії)",
-                },
                 "description_i18n": {
                     "ru": (
                         "CDK (ключ) для самостоятельной активации подписки по session key "
@@ -516,15 +582,9 @@ class ShopRepository:
                 "category_slug": "claude",
                 "slug": "claude-max-20x",
                 "title": "CDK Claude Max 20x",
-                "internal_name": "CDK Claude Max 20x (No Warranty)",
                 "description": "Ключ для активации Claude Max с увеличенным лимитом использования.",
                 "important_info": "Рекомендуется активация на чистом аккаунте с качественным IP.",
                 "title_i18n": {"ru": "CDK Claude Max 20x", "en": "CDK Claude Max 20x", "uk": "CDK Claude Max 20x"},
-                "internal_name_i18n": {
-                    "ru": "CDK Claude Max 20x (No Warranty)",
-                    "en": "CDK Claude Max 20x (No Warranty)",
-                    "uk": "CDK Claude Max 20x (Без гарантії)",
-                },
                 "description_i18n": {
                     "ru": "Ключ для активации Claude Max с увеличенным лимитом использования.",
                     "en": "Activation key for Claude Max with a higher usage limit.",
@@ -543,15 +603,9 @@ class ShopRepository:
                 "category_slug": "chatgpt",
                 "slug": "chatgpt-plus",
                 "title": "ChatGPT Plus",
-                "internal_name": "ChatGPT Plus Upgrade",
                 "description": "Доступ к ChatGPT Plus в формате цифрового ключа или инструкции.",
                 "important_info": "После покупки вы получите ключ или инструкцию в зависимости от поставки.",
                 "title_i18n": {"ru": "ChatGPT Plus", "en": "ChatGPT Plus", "uk": "ChatGPT Plus"},
-                "internal_name_i18n": {
-                    "ru": "ChatGPT Plus Upgrade",
-                    "en": "ChatGPT Plus Upgrade",
-                    "uk": "Оновлення до ChatGPT Plus",
-                },
                 "description_i18n": {
                     "ru": "Доступ к ChatGPT Plus в формате цифрового ключа или инструкции.",
                     "en": "Access to ChatGPT Plus as a digital key or activation instructions.",
@@ -570,15 +624,9 @@ class ShopRepository:
                 "category_slug": "grok",
                 "slug": "grok-premium",
                 "title": "Grok AI Premium",
-                "internal_name": "Grok AI Premium Access",
                 "description": "Доступ к премиальному тарифу Grok AI.",
                 "important_info": "Перед покупкой уточните совместимость с вашим регионом.",
                 "title_i18n": {"ru": "Grok AI Premium", "en": "Grok AI Premium", "uk": "Grok AI Premium"},
-                "internal_name_i18n": {
-                    "ru": "Grok AI Premium Access",
-                    "en": "Grok AI Premium Access",
-                    "uk": "Преміум-доступ Grok AI",
-                },
                 "description_i18n": {
                     "ru": "Доступ к премиальному тарифу Grok AI.",
                     "en": "Access to the premium Grok AI plan.",
@@ -598,17 +646,15 @@ class ShopRepository:
             await self.db.execute(
                 """
                 INSERT INTO products(
-                    category_id, slug, title, title_i18n, internal_name, internal_name_i18n, description, description_i18n, important_info, important_info_i18n,
+                    category_id, slug, title, title_i18n, description, description_i18n, important_info, important_info_i18n,
                     price_cents, warranty_label, sort_order, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     category_map[product["category_slug"]],
                     product["slug"],
                     product["title"],
                     self._dump_localized_json(product.get("title_i18n")),
-                    product["internal_name"],
-                    self._dump_localized_json(product.get("internal_name_i18n")),
                     product["description"],
                     self._dump_localized_json(product.get("description_i18n")),
                     product["important_info"],
@@ -781,11 +827,11 @@ class ShopRepository:
         row = await self._fetchone("SELECT * FROM categories WHERE id = ?", (category_id,))
         return dict(row) if row else None
 
-    async def create_category(self, title: str, description: str, premium_emoji_id: str | None = None) -> int:
+    async def create_category(self, title: str, premium_emoji_id: str | None = None) -> int:
         slug = await self._unique_slug("categories", title)
         cursor = await self.db.execute(
-            "INSERT INTO categories(slug, title, description, premium_emoji_id, created_at) VALUES(?, ?, ?, ?, ?)",
-            (slug, title, description, premium_emoji_id, utcnow_iso()),
+            "INSERT INTO categories(slug, title, premium_emoji_id, created_at) VALUES(?, ?, ?, ?)",
+            (slug, title, premium_emoji_id, utcnow_iso()),
         )
         await self.db.commit()
         return cursor.lastrowid
@@ -794,17 +840,16 @@ class ShopRepository:
         self,
         category_id: int,
         title: str,
-        description: str,
         sort_order: int,
         premium_emoji_id: str | None = None,
     ) -> None:
         await self.db.execute(
             """
             UPDATE categories
-            SET title = ?, description = ?, sort_order = ?, premium_emoji_id = ?
+            SET title = ?, sort_order = ?, premium_emoji_id = ?
             WHERE id = ?
             """,
-            (title, description, sort_order, premium_emoji_id, category_id),
+            (title, sort_order, premium_emoji_id, category_id),
         )
         await self.db.commit()
 
@@ -868,11 +913,10 @@ class ShopRepository:
             query += """
                 AND (
                     LOWER(p.title) LIKE ?
-                    OR LOWER(p.internal_name) LIKE ?
                     OR LOWER(c.title) LIKE ?
                 )
             """
-            params.extend([pattern, pattern, pattern])
+            params.extend([pattern, pattern])
         query += " ORDER BY c.sort_order ASC, p.sort_order ASC, p.id ASC"
         rows = await self._fetchall(query, params)
         return [self._attach_product_localizations(dict(row)) for row in rows]
@@ -901,14 +945,12 @@ class ShopRepository:
         self,
         category_id: int,
         title: str,
-        internal_name: str,
         price_cents: int,
         description: str,
         important_info: str,
         warranty_label: str,
         *,
         title_i18n: dict[str, str] | None = None,
-        internal_name_i18n: dict[str, str] | None = None,
         description_i18n: dict[str, str] | None = None,
         important_info_i18n: dict[str, str] | None = None,
     ) -> int:
@@ -916,17 +958,15 @@ class ShopRepository:
         cursor = await self.db.execute(
             """
             INSERT INTO products(
-                category_id, slug, title, title_i18n, internal_name, internal_name_i18n, description, description_i18n, important_info, important_info_i18n,
+                category_id, slug, title, title_i18n, description, description_i18n, important_info, important_info_i18n,
                 price_cents, warranty_label, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 category_id,
                 slug,
                 title,
                 self._dump_localized_json(self._coerce_localized_field(title, title_i18n)),
-                internal_name,
-                self._dump_localized_json(self._coerce_localized_field(internal_name, internal_name_i18n)),
                 description,
                 self._dump_localized_json(self._coerce_localized_field(description, description_i18n)),
                 important_info,
@@ -943,8 +983,6 @@ class ShopRepository:
         allowed_fields = {
             "title",
             "title_i18n",
-            "internal_name",
-            "internal_name_i18n",
             "description",
             "description_i18n",
             "important_info",
@@ -963,14 +1001,12 @@ class ShopRepository:
         *,
         category_id: int,
         title: str,
-        internal_name: str,
         description: str,
         important_info: str,
         price_cents: int,
         warranty_label: str,
         sort_order: int,
         title_i18n: dict[str, str] | None = None,
-        internal_name_i18n: dict[str, str] | None = None,
         description_i18n: dict[str, str] | None = None,
         important_info_i18n: dict[str, str] | None = None,
     ) -> None:
@@ -980,8 +1016,6 @@ class ShopRepository:
             SET category_id = ?,
                 title = ?,
                 title_i18n = ?,
-                internal_name = ?,
-                internal_name_i18n = ?,
                 description = ?,
                 description_i18n = ?,
                 important_info = ?,
@@ -995,8 +1029,6 @@ class ShopRepository:
                 category_id,
                 title,
                 self._dump_localized_json(self._coerce_localized_field(title, title_i18n)),
-                internal_name,
-                self._dump_localized_json(self._coerce_localized_field(internal_name, internal_name_i18n)),
                 description,
                 self._dump_localized_json(self._coerce_localized_field(description, description_i18n)),
                 important_info,

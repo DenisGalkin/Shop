@@ -29,7 +29,6 @@ router = Router()
 
 class AdminStates(StatesGroup):
     add_category_title = State()
-    add_category_description = State()
     add_category_emoji = State()
     add_product_title = State()
     add_product_price = State()
@@ -83,7 +82,6 @@ async def _render_admin_category_detail(
         f"<b>Категория: {html.quote(category['title'])}</b>\n\n"
         f"Emoji: {category_premium_emoji(category)}\n"
         f"Emoji ID: <code>{html.quote(current_emoji_id or '—')}</code>\n"
-        f"Описание: {html.quote(category['description'] or '—')}\n"
         f"Статус: {'активна' if category['is_active'] else 'отключена'}"
     )
     await render_message(target, text, reply_markup=admin_category_detail_kb(category_id, bool(category["is_active"])))
@@ -201,17 +199,6 @@ async def admin_category_add_title(message: Message, state: FSMContext, config: 
     if not await _ensure_admin_access(message, config):
         return
     await state.update_data(category_title=message.text.strip())
-    await state.set_state(AdminStates.add_category_description)
-    await message.answer("Теперь отправьте описание категории.")
-
-
-@router.message(AdminStates.add_category_description)
-async def admin_category_add_description(
-    message: Message, state: FSMContext, repo: ShopRepository, config: Config
-) -> None:
-    if not await _ensure_admin_access(message, config):
-        return
-    await state.update_data(category_description=message.text.strip())
     await state.set_state(AdminStates.add_category_emoji)
     await message.answer(
         "Теперь отправьте premium emoji для категории одним сообщением.\n"
@@ -231,7 +218,7 @@ async def admin_category_add_emoji(
         await message.answer(str(exc))
         return
     data = await state.get_data()
-    await repo.create_category(data["category_title"], data["category_description"], premium_emoji_id)
+    await repo.create_category(data["category_title"], premium_emoji_id)
     await state.clear()
     await message.answer("Категория добавлена.")
     await _render_admin_home(message, repo)
@@ -289,7 +276,6 @@ async def admin_category_emoji_save(
     await repo.update_category(
         category_id,
         category["title"],
-        category["description"] or "",
         int(category["sort_order"]),
         premium_emoji_id,
     )
@@ -359,7 +345,6 @@ async def admin_product_add_warranty(
     product_id = await repo.create_product(
         category_id=data["product_category_id"],
         title=data["product_title"],
-        internal_name=data["product_title"],
         price_cents=data["product_price_cents"],
         description=data["product_description"],
         important_info=data["product_important"],
