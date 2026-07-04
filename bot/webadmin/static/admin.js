@@ -601,6 +601,7 @@ async function saveSettings(event) {
         bot_username: form.get("bot_username"),
         referral_reward_percent: form.get("referral_reward_percent"),
         default_currency: form.get("default_currency"),
+        platega_usd_rub_rate: form.get("platega_usd_rub_rate"),
       }),
     });
     await Promise.all([loadSettings({ silent: true }), loadDashboard({ silent: true })]);
@@ -1621,6 +1622,10 @@ function renderSettings() {
             <label>Валюта по умолчанию</label>
             <input name="default_currency" value="${escapeHtml(state.forms.settings.default_currency || "USD")}" />
           </div>
+          <div class="field">
+            <label>Курс USD -> RUB для Platega</label>
+            <input name="platega_usd_rub_rate" value="${escapeHtml(state.forms.settings.platega_usd_rub_rate || "80")}" />
+          </div>
           <div class="field full form-actions">
             <button class="primary-button" type="submit">Сохранить настройки</button>
           </div>
@@ -1918,12 +1923,12 @@ function renderModal() {
 
 function renderApp() {
   const tabs = [
-    ["dashboard", "Обзор", "◈"],
-    ["catalog", "Ассортимент", "▣"],
-    ["users", "Пользователи", "◉"],
-    ["orders", "Заказы", "◌"],
-    ["payments", "Платежи", "◎"],
-    ["settings", "Настройки", "✦"],
+    ["dashboard", "Обзор", "/admin/assets/icons/dashboard.png"],
+    ["catalog", "Ассортимент", "/admin/assets/icons/goods.png"],
+    ["users", "Пользователи", "/admin/assets/icons/users.png"],
+    ["orders", "Заказы", "/admin/assets/icons/orders.png"],
+    ["payments", "Платежи", "/admin/assets/icons/payments.png"],
+    ["settings", "Настройки", ""],
   ];
   const titleMap = {
     dashboard: "Обзор",
@@ -1952,7 +1957,7 @@ function renderApp() {
           ${tabs
             .map(
               ([id, label, icon]) =>
-                `<button class="${state.currentTab === id ? "active" : ""}" data-tab="${id}"><span class="nav-icon" aria-hidden="true">${escapeHtml(icon)}</span><span class="nav-label">${escapeHtml(label)}</span></button>`
+                `<button class="${state.currentTab === id ? "active" : ""}" data-tab="${id}">${icon ? `<img class="nav-icon" src="${escapeHtml(icon)}" alt="" aria-hidden="true" />` : `<span class="nav-icon-fallback" aria-hidden="true">✦</span>`}<span class="nav-label">${escapeHtml(label)}</span></button>`
             )
             .join("")}
         </nav>

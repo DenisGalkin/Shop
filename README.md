@@ -68,6 +68,10 @@ docker compose down
   - success URL: `GET /payments/lolzteam/success`;
   - API-запросы идут с `Authorization: Bearer <LOLZ_API_TOKEN>`, а webhook проверяется по `x-secret-key`, который должен совпадать с merchant token.
   - после webhook invoice повторно читается из `GET /invoice` перед подтверждением в боте.
+- `Platega`:
+  - задайте `PLATEGA_MERCHANT_ID`, `PLATEGA_SECRET` и `PLATEGA_USD_RUB_RATE`;
+  - пользователь вводит сумму и получает зачисление в USD, но сам invoice для Platega создаётся и проверяется в RUB;
+  - курс можно менять через `.env` и в web-админке в разделе настроек.
 - Для включённых платёжных провайдеров обязателен `PUBLIC_BASE_URL`, иначе бот не запустится: без него нельзя корректно собрать callback/success URLs и webhook-маршруты.
 - Для всех провайдеров доступны ручная проверка статуса в боте и фоновая синхронизация pending-платежей.
 

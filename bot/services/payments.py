@@ -7,6 +7,7 @@ import json
 import logging
 import ssl
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Protocol
 
 from aiogram import Bot, html
@@ -682,14 +683,16 @@ class PlategaPaymentService(BasePaymentService):
         return result
 
     async def _create_payment_record(self, **kwargs: Any) -> dict[str, Any]:
+        kwargs["currency"] = "USD"
         return await self.repo.create_payment(payment_type=self.payment_type, **kwargs)
 
     async def _create_invoice(self, payment: dict[str, Any], *, user: dict[str, Any]) -> dict[str, Any]:
         username = str(user.get("username") or "").strip().lstrip("@")
+        rub_amount = await self._convert_amount_to_rub(payment["amount_cents"])
         payload = {
             "paymentMethod": self.config.platega_payment_method,
             "paymentDetails": {
-                "amount": float(self.client.cents_to_amount(payment["amount_cents"])),
+                "amount": float(rub_amount),
                 "currency": self.config.platega_invoice_currency,
             },
             "description": await self._build_description(payment, user.get("language_code")),
@@ -712,6 +715,21 @@ class PlategaPaymentService(BasePaymentService):
             },
         }
         return await self.client.create_invoice(payload)
+
+    async def _convert_amount_to_rub(self, amount_cents: int) -> Decimal:
+        amount_usd = Decimal(amount_cents) / Decimal("100")
+        return (amount_usd * await self._get_usd_rub_rate()).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    async def _get_usd_rub_rate(self) -> Decimal:
+        settings = await self.repo.get_settings()
+        raw_rate = str(settings.get("platega_usd_rub_rate") or self.config.platega_usd_rub_rate).strip()
+        try:
+            rate = Decimal(raw_rate.replace(",", "."))
+        except InvalidOperation as exc:
+            raise ValueError("Некорректно настроен курс USD/RUB для Platega") from exc
+        if rate <= 0:
+            raise ValueError("Курс USD/RUB для Platega должен быть больше 0")
+        return rate
 
     async def _fetch_invoice_for_payment(self, payment: dict[str, Any]) -> dict[str, Any] | None:
         provider_invoice_id = str(payment.get("provider_invoice_id") or payment.get("provider_payment_id") or "").strip()

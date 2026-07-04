@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import base64
 import os
-from hashlib import sha256
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+from hashlib import sha256
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -57,6 +58,7 @@ class Config:
     platega_secret: str
     platega_payment_method: int
     platega_invoice_currency: str
+    platega_usd_rub_rate: Decimal
     platega_invoice_lifetime_minutes: int
     platega_create_path: str
     platega_create_path_fallback: str
@@ -100,6 +102,16 @@ def _parse_bool(raw_value: str, default: bool = False) -> bool:
 
 def _parse_csv(raw_value: str) -> tuple[str, ...]:
     return tuple(chunk.strip().upper() for chunk in raw_value.split(",") if chunk.strip())
+
+
+def _parse_positive_decimal(raw_value: str, env_name: str) -> Decimal:
+    try:
+        value = Decimal(raw_value.strip())
+    except (AttributeError, InvalidOperation) as exc:
+        raise RuntimeError(f"{env_name} must be a valid positive number") from exc
+    if value <= 0:
+        raise RuntimeError(f"{env_name} must be greater than 0")
+    return value
 
 
 def load_config() -> Config:
@@ -187,6 +199,7 @@ def load_config() -> Config:
         platega_secret=platega_secret,
         platega_payment_method=int(os.getenv("PLATEGA_PAYMENT_METHOD", "2")),
         platega_invoice_currency=os.getenv("PLATEGA_INVOICE_CURRENCY", "RUB").strip().upper(),
+        platega_usd_rub_rate=_parse_positive_decimal(os.getenv("PLATEGA_USD_RUB_RATE", "80"), "PLATEGA_USD_RUB_RATE"),
         platega_invoice_lifetime_minutes=int(os.getenv("PLATEGA_INVOICE_LIFETIME_MINUTES", "15")),
         platega_create_path=os.getenv("PLATEGA_CREATE_PATH", "/transaction/process").strip(),
         platega_create_path_fallback=os.getenv("PLATEGA_CREATE_PATH_FALLBACK", "/v2/transaction/process").strip(),

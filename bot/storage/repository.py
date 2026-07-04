@@ -426,6 +426,7 @@ class ShopRepository:
             "bot_username": config.bot_username,
             "default_currency": config.default_currency,
             "referral_reward_percent": str(config.referral_reward_percent),
+            "platega_usd_rub_rate": str(config.platega_usd_rub_rate),
         }
         for key, value in settings.items():
             await self.db.execute(

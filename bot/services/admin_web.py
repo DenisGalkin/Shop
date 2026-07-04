@@ -5,6 +5,7 @@ import hmac
 import json
 from datetime import datetime
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -609,13 +610,23 @@ async def admin_settings(request: web.Request) -> web.Response:
     if request.method == "GET":
         return web.json_response({"ok": True, "item": await repo.get_settings()})
     payload = await _get_json(request)
-    editable_keys = {"support_username", "bot_username", "referral_reward_percent", "default_currency"}
+    editable_keys = {"support_username", "bot_username", "referral_reward_percent", "default_currency", "platega_usd_rub_rate"}
     updated: dict[str, str] = {}
     for key in editable_keys:
         if key in payload:
-            value = str(payload[key]).strip().lstrip("@")
+            value = str(payload[key]).strip()
+            if key == "support_username":
+                value = value.lstrip("@")
             if key == "default_currency":
                 value = value.upper()
+            if key == "platega_usd_rub_rate":
+                try:
+                    normalized_rate = Decimal(value.replace(",", "."))
+                except InvalidOperation as exc:
+                    raise web.HTTPBadRequest(text="platega_usd_rub_rate must be a valid number") from exc
+                if normalized_rate <= 0:
+                    raise web.HTTPBadRequest(text="platega_usd_rub_rate must be greater than 0")
+                value = format(normalized_rate.normalize(), "f")
             await repo.set_setting(key, value)
             updated[key] = value
     return web.json_response({"ok": True, "item": {**await repo.get_settings(), **updated}})
@@ -623,17 +634,19 @@ async def admin_settings(request: web.Request) -> web.Response:
 
 async def admin_asset(request: web.Request) -> web.FileResponse:
     filename = request.match_info["filename"]
-    if "/" in filename or "\\" in filename:
+    asset_path = (STATIC_DIR / filename).resolve()
+    try:
+        asset_path.relative_to(STATIC_DIR.resolve())
+    except ValueError:
         raise web.HTTPNotFound()
-    path = STATIC_DIR / filename
-    if not path.exists():
+    if not asset_path.is_file():
         raise web.HTTPNotFound()
-    return web.FileResponse(path)
+    return web.FileResponse(asset_path)
 
 
 def setup_admin_routes(app: web.Application) -> None:
     app.router.add_get("/admin", admin_shell)
-    app.router.add_get("/admin/assets/{filename}", admin_asset)
+    app.router.add_get("/admin/assets/{filename:.+}", admin_asset)
     app.router.add_post("/admin/api/login", admin_login)
     app.router.add_post("/admin/api/logout", admin_logout)
     app.router.add_get("/admin/api/session", admin_session)
