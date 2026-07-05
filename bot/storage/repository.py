@@ -873,9 +873,31 @@ class ShopRepository:
         await self.db.commit()
 
     async def delete_category(self, category_id: int) -> None:
-        product_row = await self._fetchone("SELECT 1 FROM products WHERE category_id = ? LIMIT 1", (category_id,))
-        if product_row:
-            raise ValueError("Delete all products in this category first")
+        category_row = await self._fetchone("SELECT 1 FROM categories WHERE id = ? LIMIT 1", (category_id,))
+        if not category_row:
+            raise ValueError("Category not found")
+
+        product_counts = await self._fetchone(
+            """
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_total
+            FROM products
+            WHERE category_id = ?
+            """,
+            (category_id,),
+        )
+        total = int(product_counts["total"] or 0) if product_counts else 0
+        active_total = int(product_counts["active_total"] or 0) if product_counts else 0
+        if total > 0:
+            hidden_total = total - active_total
+            if active_total and hidden_total:
+                raise ValueError(
+                    f"This category cannot be deleted yet: it still contains {total} products ({active_total} active, {hidden_total} hidden)"
+                )
+            if active_total:
+                raise ValueError(f"This category cannot be deleted yet: it still contains {active_total} active products")
+            raise ValueError(f"This category cannot be deleted yet: it still contains {hidden_total} hidden products")
+
         await self.db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
         await self.db.commit()
 
@@ -1076,13 +1098,42 @@ class ShopRepository:
         await self.db.commit()
 
     async def delete_product(self, product_id: int) -> None:
+        product_row = await self._fetchone("SELECT 1 FROM products WHERE id = ? LIMIT 1", (product_id,))
+        if not product_row:
+            raise ValueError("Product not found")
+
+        order_row = await self._fetchone("SELECT 1 FROM orders WHERE product_id = ? LIMIT 1", (product_id,))
+        if order_row:
+            raise ValueError("This product cannot be deleted because it already has related orders")
+
+        payment_row = await self._fetchone("SELECT 1 FROM payments WHERE product_id = ? LIMIT 1", (product_id,))
+        if payment_row:
+            raise ValueError("This product cannot be deleted because it already has related payments")
+
+        reserved_stock_row = await self._fetchone(
+            """
+            SELECT 1
+            FROM stock_items
+            WHERE product_id = ?
+              AND (
+                status != 'available'
+                OR order_id IS NOT NULL
+                OR reserved_payment_id IS NOT NULL
+              )
+            LIMIT 1
+            """,
+            (product_id,),
+        )
+        if reserved_stock_row:
+            raise ValueError("This product cannot be deleted because it has sold or reserved keys")
+
         try:
             await self.db.execute("DELETE FROM stock_items WHERE product_id = ?", (product_id,))
             cursor = await self.db.execute("DELETE FROM products WHERE id = ?", (product_id,))
             await self.db.commit()
         except aiosqlite.IntegrityError as exc:
             await self.db.rollback()
-            raise ValueError("This product cannot be deleted because it already has related orders, payments, or reserved keys") from exc
+            raise ValueError("This product cannot be deleted because it already has related data") from exc
         if (cursor.rowcount or 0) == 0:
             raise ValueError("Product not found")
 

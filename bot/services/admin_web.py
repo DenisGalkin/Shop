@@ -432,7 +432,8 @@ async def admin_category_delete(request: web.Request) -> web.Response:
     try:
         await repo.delete_category(category_id)
     except ValueError as exc:
-        return _json_error(str(exc), status=409)
+        status = 404 if str(exc) == "Category not found" else 409
+        return _json_error(str(exc), status=status)
     return web.json_response({"ok": True})
 
 
