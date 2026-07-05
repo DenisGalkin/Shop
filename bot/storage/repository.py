@@ -420,6 +420,7 @@ class ShopRepository:
         product_columns = {row["name"] for row in await self._fetchall("PRAGMA table_info(products)")}
         if "internal_name" in product_columns or "internal_name_i18n" in product_columns:
             await self._rebuild_products_without_internal_name()
+        await self._rebuild_stock_items_if_legacy_product_fk()
         await self._rebuild_stock_notifications_if_legacy_product_fk()
 
     async def _rebuild_categories_without_description(self) -> None:
@@ -524,6 +525,48 @@ class ShopRepository:
         await self.db.execute(
             "CREATE INDEX IF NOT EXISTS idx_stock_notifications_product ON stock_notifications(product_id)"
         )
+        await self.db.execute("PRAGMA foreign_keys=ON")
+
+    async def _rebuild_stock_items_if_legacy_product_fk(self) -> None:
+        foreign_keys = await self._fetchall("PRAGMA foreign_key_list(stock_items)")
+        if not foreign_keys:
+            return
+        references_legacy_products = any(row["table"] == "products_legacy" for row in foreign_keys)
+        if not references_legacy_products:
+            return
+
+        await self.db.execute("PRAGMA foreign_keys=OFF")
+        await self.db.execute("ALTER TABLE stock_items RENAME TO stock_items_legacy")
+        await self.db.execute(
+            """
+            CREATE TABLE stock_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                key_value TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT 'available',
+                order_id INTEGER,
+                reserved_payment_id TEXT,
+                reserved_until TEXT,
+                created_at TEXT NOT NULL,
+                sold_at TEXT,
+                FOREIGN KEY (product_id) REFERENCES products(id),
+                FOREIGN KEY (order_id) REFERENCES orders(id)
+            )
+            """
+        )
+        await self.db.execute(
+            """
+            INSERT INTO stock_items(
+                id, product_id, key_value, status, order_id, reserved_payment_id, reserved_until, created_at, sold_at
+            )
+            SELECT
+                id, product_id, key_value, status, order_id, reserved_payment_id, reserved_until, created_at, sold_at
+            FROM stock_items_legacy
+            """
+        )
+        await self.db.execute("DROP TABLE stock_items_legacy")
+        await self.db.execute("CREATE INDEX IF NOT EXISTS idx_stock_product_status ON stock_items(product_id, status)")
+        await self.db.execute("CREATE INDEX IF NOT EXISTS idx_stock_reserved_until ON stock_items(status, reserved_until)")
         await self.db.execute("PRAGMA foreign_keys=ON")
 
     async def _ensure_column(self, table_name: str, column_name: str, ddl: str) -> None:
