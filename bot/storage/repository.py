@@ -418,6 +418,7 @@ class ShopRepository:
         product_columns = {row["name"] for row in await self._fetchall("PRAGMA table_info(products)")}
         if "internal_name" in product_columns or "internal_name_i18n" in product_columns:
             await self._rebuild_products_without_internal_name()
+        await self._rebuild_stock_notifications_if_legacy_product_fk()
 
     async def _rebuild_categories_without_description(self) -> None:
         await self.db.execute("PRAGMA foreign_keys=OFF")
@@ -484,6 +485,42 @@ class ShopRepository:
             """
         )
         await self.db.execute("DROP TABLE products_legacy")
+        await self.db.execute("PRAGMA foreign_keys=ON")
+
+    async def _rebuild_stock_notifications_if_legacy_product_fk(self) -> None:
+        foreign_keys = await self._fetchall("PRAGMA foreign_key_list(stock_notifications)")
+        if not foreign_keys:
+            return
+        references_legacy_products = any(row["table"] == "products_legacy" for row in foreign_keys)
+        if not references_legacy_products:
+            return
+
+        await self.db.execute("PRAGMA foreign_keys=OFF")
+        await self.db.execute("ALTER TABLE stock_notifications RENAME TO stock_notifications_legacy")
+        await self.db.execute(
+            """
+            CREATE TABLE stock_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, product_id),
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (product_id) REFERENCES products(id)
+            )
+            """
+        )
+        await self.db.execute(
+            """
+            INSERT INTO stock_notifications(id, user_id, product_id, created_at)
+            SELECT id, user_id, product_id, created_at
+            FROM stock_notifications_legacy
+            """
+        )
+        await self.db.execute("DROP TABLE stock_notifications_legacy")
+        await self.db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stock_notifications_product ON stock_notifications(product_id)"
+        )
         await self.db.execute("PRAGMA foreign_keys=ON")
 
     async def _ensure_column(self, table_name: str, column_name: str, ddl: str) -> None:
