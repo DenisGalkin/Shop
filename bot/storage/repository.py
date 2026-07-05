@@ -143,6 +143,7 @@ class ShopRepository:
                 description_i18n TEXT NOT NULL DEFAULT '{}',
                 important_info TEXT NOT NULL DEFAULT '',
                 important_info_i18n TEXT NOT NULL DEFAULT '{}',
+                activation_link TEXT NOT NULL DEFAULT '',
                 price_cents INTEGER NOT NULL,
                 warranty_label TEXT NOT NULL DEFAULT '',
                 is_active INTEGER NOT NULL DEFAULT 1,
@@ -254,6 +255,7 @@ class ShopRepository:
         await self._ensure_column("products", "title_i18n", "TEXT NOT NULL DEFAULT '{}'")
         await self._ensure_column("products", "description_i18n", "TEXT NOT NULL DEFAULT '{}'")
         await self._ensure_column("products", "important_info_i18n", "TEXT NOT NULL DEFAULT '{}'")
+        await self._ensure_column("products", "activation_link", "TEXT NOT NULL DEFAULT ''")
         await self._ensure_column("categories", "premium_emoji_id", "TEXT")
         await self._ensure_column("stock_items", "reserved_payment_id", "TEXT")
         await self._ensure_column("stock_items", "reserved_until", "TEXT")
@@ -461,6 +463,7 @@ class ShopRepository:
                 description_i18n TEXT NOT NULL DEFAULT '{}',
                 important_info TEXT NOT NULL DEFAULT '',
                 important_info_i18n TEXT NOT NULL DEFAULT '{}',
+                activation_link TEXT NOT NULL DEFAULT '',
                 price_cents INTEGER NOT NULL,
                 warranty_label TEXT NOT NULL DEFAULT '',
                 is_active INTEGER NOT NULL DEFAULT 1,
@@ -474,12 +477,12 @@ class ShopRepository:
             """
             INSERT INTO products(
                 id, category_id, slug, title, title_i18n, description, description_i18n,
-                important_info, important_info_i18n, price_cents, warranty_label, is_active,
+                important_info, important_info_i18n, activation_link, price_cents, warranty_label, is_active,
                 sort_order, created_at
             )
             SELECT
                 id, category_id, slug, title, title_i18n, description, description_i18n,
-                important_info, important_info_i18n, price_cents, warranty_label, is_active,
+                important_info, important_info_i18n, '', price_cents, warranty_label, is_active,
                 sort_order, created_at
             FROM products_legacy
             """
@@ -1027,14 +1030,15 @@ class ShopRepository:
         title_i18n: dict[str, str] | None = None,
         description_i18n: dict[str, str] | None = None,
         important_info_i18n: dict[str, str] | None = None,
+        activation_link: str = "",
     ) -> int:
         slug = await self._unique_slug("products", title)
         cursor = await self.db.execute(
             """
             INSERT INTO products(
                 category_id, slug, title, title_i18n, description, description_i18n, important_info, important_info_i18n,
-                price_cents, warranty_label, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                activation_link, price_cents, warranty_label, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 category_id,
@@ -1045,6 +1049,7 @@ class ShopRepository:
                 self._dump_localized_json(self._coerce_localized_field(description, description_i18n)),
                 important_info,
                 self._dump_localized_json(self._coerce_localized_field(important_info, important_info_i18n)),
+                str(activation_link or "").strip(),
                 price_cents,
                 warranty_label,
                 utcnow_iso(),
@@ -1061,6 +1066,7 @@ class ShopRepository:
             "description_i18n",
             "important_info",
             "important_info_i18n",
+            "activation_link",
             "price_cents",
             "warranty_label",
         }
@@ -1083,6 +1089,7 @@ class ShopRepository:
         title_i18n: dict[str, str] | None = None,
         description_i18n: dict[str, str] | None = None,
         important_info_i18n: dict[str, str] | None = None,
+        activation_link: str = "",
     ) -> None:
         await self.db.execute(
             """
@@ -1094,6 +1101,7 @@ class ShopRepository:
                 description_i18n = ?,
                 important_info = ?,
                 important_info_i18n = ?,
+                activation_link = ?,
                 price_cents = ?,
                 warranty_label = ?,
                 sort_order = ?
@@ -1107,6 +1115,7 @@ class ShopRepository:
                 self._dump_localized_json(self._coerce_localized_field(description, description_i18n)),
                 important_info,
                 self._dump_localized_json(self._coerce_localized_field(important_info, important_info_i18n)),
+                str(activation_link or "").strip(),
                 price_cents,
                 warranty_label,
                 sort_order,
@@ -1309,7 +1318,7 @@ class ShopRepository:
         rows = await self._fetchall(
             """
             SELECT o.*, p.title AS product_title, c.slug AS category_slug, c.premium_emoji_id AS category_premium_emoji_id
-                   , p.title_i18n AS product_title_i18n
+                   , p.title_i18n AS product_title_i18n, p.activation_link
             FROM orders o
             JOIN products p ON p.id = o.product_id
             JOIN categories c ON c.id = p.category_id
@@ -1330,7 +1339,7 @@ class ShopRepository:
         row = await self._fetchone(
             """
             SELECT o.*, p.title AS product_title, c.slug AS category_slug, c.premium_emoji_id AS category_premium_emoji_id, s.key_value
-                   , p.title_i18n AS product_title_i18n
+                   , p.title_i18n AS product_title_i18n, p.activation_link
             FROM orders o
             JOIN products p ON p.id = o.product_id
             JOIN categories c ON c.id = p.category_id

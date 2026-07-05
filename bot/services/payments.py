@@ -28,6 +28,13 @@ from .platega_client import PlategaApiError, PlategaClient
 logger = logging.getLogger(__name__)
 
 
+def _activation_link_block(item: dict[str, Any] | None) -> str:
+    link = str((item or {}).get("activation_link") or "").strip()
+    if not link:
+        return ""
+    return f'\n{premium_emoji("link")} Link: {html.quote(link)}'
+
+
 class PaymentProvider(Protocol):
     payment_type: str
 
@@ -188,6 +195,7 @@ class BasePaymentService:
                 price_emoji=premium_emoji("price"),
                 amount=format_money(order.get("amount_cents", 0)),
                 key_value=html.quote(order.get("key_value", "—")),
+                activation_link_block=_activation_link_block(order),
             ),
         )
 

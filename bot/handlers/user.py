@@ -31,7 +31,7 @@ from bot.storage.repository import ShopRepository
 from bot.utils.formatting import format_date, format_money, parse_money_to_cents
 from bot.utils.i18n import language_name, normalize_language_code, tr, translate_error
 from bot.utils.messages import render_message
-from bot.utils.premium_emoji import category_premium_emoji, premium_emoji
+from bot.utils.premium_emoji import category_premium_emoji, premium_emoji, premium_emoji_by_id
 
 router = Router()
 
@@ -43,6 +43,13 @@ class UserStates(StatesGroup):
 
 def _category_emoji(category: dict) -> str:
     return category_premium_emoji(category)
+
+
+def _activation_link_block(item: dict | None) -> str:
+    link = str((item or {}).get("activation_link") or "").strip()
+    if not link:
+        return ""
+    return f'\n{premium_emoji("link")} Link: {html.quote(link)}'
 
 
 def _extract_referral_code(payload: str | None) -> int | None:
@@ -217,11 +224,13 @@ async def product_card_handler(callback: CallbackQuery, repo: ShopRepository) ->
         "product_card_text",
         category_emoji=_category_emoji(product),
         product_title=html.quote(product["title"]),
-        catalog_emoji=premium_emoji("catalog"),
+        catalog_emoji=premium_emoji_by_id("5836672976862319297", "🗂"),
         category_title=html.quote(product["category_title"]),
-        price_emoji=premium_emoji("price"),
+        price_emoji=premium_emoji_by_id("5197434882321567830", "💵"),
         price=format_money(product["price_cents"]),
-        stock_emoji=premium_emoji("stock"),
+        warranty_emoji=premium_emoji_by_id("5206607081334906820", "🛡"),
+        warranty=html.quote(product.get("warranty_label") or "—"),
+        stock_emoji=premium_emoji_by_id("5258203794772085854", "📦"),
         stock_count=product["stock_count"],
         description_emoji=premium_emoji("description"),
         description=html.quote(product["description"]),
@@ -341,6 +350,7 @@ async def buy_balance_handler(callback: CallbackQuery, repo: ShopRepository) -> 
         amount=format_money(order["amount_cents"]),
         key_emoji=premium_emoji("key"),
         key_value=html.quote(order["key_value"]),
+        activation_link_block=_activation_link_block(order),
     )
     await render_message(callback, text, reply_markup=order_detail_kb(1, lang))
 
@@ -463,6 +473,7 @@ async def order_detail_handler(callback: CallbackQuery, repo: ShopRepository) ->
         amount=format_money(order["amount_cents"]),
         key_emoji=premium_emoji("key"),
         key_value=html.quote(order["key_value"] or "—"),
+        activation_link_block=_activation_link_block(order),
     )
     await render_message(callback, text, reply_markup=order_detail_kb(page, lang))
 
@@ -590,6 +601,7 @@ async def payment_check_handler(
             amount=format_money(order["amount_cents"]),
             key_emoji=premium_emoji("key"),
             key_value=html.quote(order["key_value"]),
+            activation_link_block=_activation_link_block(order),
         )
         await render_message(callback, text, reply_markup=order_detail_kb(1, lang))
         return

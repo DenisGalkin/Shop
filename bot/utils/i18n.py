@@ -63,6 +63,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{category_emoji} {product_title}</b>\n\n"
             "{catalog_emoji} Категория: {category_title}\n"
             "{price_emoji} Стоимость: {price}\n"
+            "{warranty_emoji} Гарантия: {warranty}\n"
             "{stock_emoji} В наличии: {stock_count} шт.\n\n"
             "{description_emoji} Описание товара:\n{description}\n\n"
             "{important_emoji} Важная информация:\n{important_info}"
@@ -84,7 +85,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Заказ #{order_id} успешно оформлен</b>\n\n"
             "{category_emoji} Товар: {product_title}\n"
             "{price_emoji} Стоимость: {amount}\n"
-            "{key_emoji} Ключ: <code>{key_value}</code>\n\n"
+            "{key_emoji} Ключ: <code>{key_value}</code>{activation_link_block}\n\n"
             "Ключ также сохранён в разделе «Мои покупки»."
         ),
         "invoice_created_text": (
@@ -103,7 +104,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Заказ #{order_id} — {created_at}</b>\n\n"
             "{category_emoji} Товар: {product_title}\n"
             "{price_emoji} Стоимость: {amount}\n"
-            "{key_emoji} Ключ: <code>{key_value}</code>"
+            "{key_emoji} Ключ: <code>{key_value}</code>{activation_link_block}"
         ),
         "orders_to_list": "К списку заказов",
         "deposit_unavailable": "Пополнение временно недоступно",
@@ -169,7 +170,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Оплата подтверждена</b>\n\n"
             "{category_emoji} Товар: {product_title}\n"
             "{price_emoji} Стоимость: {amount}\n"
-            "{category_emoji} Ключ:\n<code>{key_value}</code>\n\n"
+            "{category_emoji} Ключ:\n<code>{key_value}</code>{activation_link_block}\n\n"
             "Покупка сохранена в разделе «Мои покупки»."
         ),
         "secure_connection_error": "Не удалось установить защищенное соединение с платёжным шлюзом. Попробуйте еще раз через минуту.",
@@ -243,6 +244,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{category_emoji} {product_title}</b>\n\n"
             "{catalog_emoji} Category: {category_title}\n"
             "{price_emoji} Price: {price}\n"
+            "{warranty_emoji} Warranty: {warranty}\n"
             "{stock_emoji} In stock: {stock_count} pcs.\n\n"
             "{description_emoji} Product description:\n{description}\n\n"
             "{important_emoji} Important information:\n{important_info}"
@@ -264,7 +266,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Order #{order_id} completed successfully</b>\n\n"
             "{category_emoji} Product: {product_title}\n"
             "{price_emoji} Price: {amount}\n"
-            "{key_emoji} Key: <code>{key_value}</code>\n\n"
+            "{key_emoji} Key: <code>{key_value}</code>{activation_link_block}\n\n"
             "The key is also saved in the “My purchases” section."
         ),
         "invoice_created_text": (
@@ -283,7 +285,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Order #{order_id} — {created_at}</b>\n\n"
             "{category_emoji} Product: {product_title}\n"
             "{price_emoji} Price: {amount}\n"
-            "{key_emoji} Key: <code>{key_value}</code>"
+            "{key_emoji} Key: <code>{key_value}</code>{activation_link_block}"
         ),
         "orders_to_list": "Back to orders",
         "deposit_unavailable": "Top-up is temporarily unavailable",
@@ -349,7 +351,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Payment confirmed</b>\n\n"
             "{category_emoji} Product: {product_title}\n"
             "{price_emoji} Price: {amount}\n"
-            "{category_emoji} Key:\n<code>{key_value}</code>\n\n"
+            "{category_emoji} Key:\n<code>{key_value}</code>{activation_link_block}\n\n"
             "The purchase has been saved in the “My purchases” section."
         ),
         "secure_connection_error": "Could not establish a secure connection to the payment gateway. Please try again in a minute.",
@@ -423,6 +425,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{category_emoji} {product_title}</b>\n\n"
             "{catalog_emoji} Категорія: {category_title}\n"
             "{price_emoji} Вартість: {price}\n"
+            "{warranty_emoji} Гарантія: {warranty}\n"
             "{stock_emoji} У наявності: {stock_count} шт.\n\n"
             "{description_emoji} Опис товару:\n{description}\n\n"
             "{important_emoji} Важлива інформація:\n{important_info}"
@@ -444,7 +447,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Замовлення #{order_id} успішно оформлено</b>\n\n"
             "{category_emoji} Товар: {product_title}\n"
             "{price_emoji} Вартість: {amount}\n"
-            "{key_emoji} Ключ: <code>{key_value}</code>\n\n"
+            "{key_emoji} Ключ: <code>{key_value}</code>{activation_link_block}\n\n"
             "Ключ також збережено в розділі «Мої покупки»."
         ),
         "invoice_created_text": (
@@ -463,7 +466,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Замовлення #{order_id} — {created_at}</b>\n\n"
             "{category_emoji} Товар: {product_title}\n"
             "{price_emoji} Вартість: {amount}\n"
-            "{key_emoji} Ключ: <code>{key_value}</code>"
+            "{key_emoji} Ключ: <code>{key_value}</code>{activation_link_block}"
         ),
         "orders_to_list": "До списку замовлень",
         "deposit_unavailable": "Поповнення тимчасово недоступне",
@@ -529,7 +532,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "<b>{order_emoji} Оплату підтверджено</b>\n\n"
             "{category_emoji} Товар: {product_title}\n"
             "{price_emoji} Вартість: {amount}\n"
-            "{category_emoji} Ключ:\n<code>{key_value}</code>\n\n"
+            "{category_emoji} Ключ:\n<code>{key_value}</code>{activation_link_block}\n\n"
             "Покупку збережено в розділі «Мої покупки»."
         ),
         "secure_connection_error": "Не вдалося встановити захищене з'єднання з платіжним шлюзом. Спробуйте ще раз за хвилину.",

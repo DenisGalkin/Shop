@@ -57,6 +57,15 @@ const LANGS = ['EN', 'RU', 'UA'] as const
 type Lang = typeof LANGS[number]
 const LANG_KEY: Record<Lang, 'en' | 'ru' | 'ua'> = { EN: 'en', RU: 'ru', UA: 'ua' }
 
+function normalizeModalI18n(value?: { en?: string; ru?: string; ua?: string; uk?: string }) {
+  const ukrainian = value?.ua ?? value?.uk ?? ''
+  return {
+    en: value?.en ?? '',
+    ru: value?.ru ?? '',
+    ua: ukrainian,
+  }
+}
+
 // ── empty product template ────────────────────────────────────────────────────
 const emptyProduct = (categories: Category[]): Omit<Product, 'id' | 'slug' | 'created_at' | 'sold'> => ({
   category_id: categories[0]?.id ?? '',
@@ -67,6 +76,7 @@ const emptyProduct = (categories: Category[]): Omit<Product, 'id' | 'slug' | 'cr
   description_i18n:  { en: '', ru: '', ua: '' },
   important_info: '',
   important_info_i18n: { en: '', ru: '', ua: '' },
+  activation_link: '',
   price_cents:    0,
   warranty_label: '',
   is_active:  true,
@@ -93,11 +103,12 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
           category_id:         product.category_id,
           category:            product.category,
           title:               product.title,
-          title_i18n:          { ...product.title_i18n },
+          title_i18n:          normalizeModalI18n(product.title_i18n),
           description:         product.description,
-          description_i18n:    { ...product.description_i18n },
+          description_i18n:    normalizeModalI18n(product.description_i18n),
           important_info:      product.important_info,
-          important_info_i18n: { ...product.important_info_i18n },
+          important_info_i18n: normalizeModalI18n(product.important_info_i18n),
+          activation_link:     product.activation_link || '',
           price_cents:         product.price_cents,
           warranty_label:      product.warranty_label,
           is_active:           product.is_active,
@@ -136,7 +147,7 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
 
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
           {/* Category + Price + Warranty row */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Category</label>
               <div className="relative">
@@ -178,6 +189,18 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
                 className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-neon/30"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">Activation link</label>
+            <input
+              type="url"
+              inputMode="url"
+              placeholder="https://example.com/activate"
+              value={form.activation_link}
+              onChange={(e) => setForm((f) => ({ ...f, activation_link: e.target.value }))}
+              className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30"
+            />
           </div>
 
           {/* Lang switcher */}
@@ -239,22 +262,6 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
             </div>
           </div>
 
-          {/* Active toggle */}
-          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-raised border border-border">
-            <div>
-              <p className="text-sm font-medium text-foreground">Show product</p>
-              <p className="text-xs text-muted-foreground">Hide from catalog without deleting</p>
-            </div>
-            <button
-              onClick={() => setForm((f) => ({ ...f, is_active: !f.is_active }))}
-              className={cn(
-                'relative w-11 h-6 rounded-full transition-colors duration-200',
-                form.is_active ? 'bg-neon' : 'bg-white/10',
-              )}
-            >
-              <span className={cn('absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200', form.is_active && 'translate-x-5')} />
-            </button>
-          </div>
         </div>
 
         {/* Footer */}

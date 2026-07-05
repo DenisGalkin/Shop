@@ -1,6 +1,6 @@
 'use client'
 
-export type I18nText = { en?: string; ru?: string; ua?: string }
+export type I18nText = { en?: string; ru?: string; ua?: string; uk?: string }
 
 export type Category = {
   id: string
@@ -24,6 +24,7 @@ export type Product = {
   description_i18n: I18nText
   important_info: string
   important_info_i18n: I18nText
+  activation_link: string
   price_cents: number
   warranty_label: string
   is_active: boolean
@@ -188,16 +189,20 @@ function mapCategory(raw: any): Category {
 }
 
 function mapProduct(raw: any): Product {
+  const titleI18n = normalizeProductI18n(raw.title_i18n)
+  const descriptionI18n = normalizeProductI18n(raw.description_i18n)
+  const importantInfoI18n = normalizeProductI18n(raw.important_info_i18n)
   return {
     id: String(raw.id),
     category_id: String(raw.category_id),
     slug: raw.slug || String(raw.id),
     title: raw.title || '',
-    title_i18n: raw.title_i18n || {},
+    title_i18n: titleI18n,
     description: raw.description || '',
-    description_i18n: raw.description_i18n || {},
+    description_i18n: descriptionI18n,
     important_info: raw.important_info || '',
-    important_info_i18n: raw.important_info_i18n || {},
+    important_info_i18n: importantInfoI18n,
+    activation_link: raw.activation_link || '',
     price_cents: Number(raw.price_cents || 0),
     warranty_label: raw.warranty_label || '',
     is_active: Boolean(raw.is_active),
@@ -207,6 +212,19 @@ function mapProduct(raw: any): Product {
     stock: Number(raw.stock_count || 0),
     sold: Number(raw.sold_count || 0),
     image: '📦',
+  }
+}
+
+function normalizeProductI18n(raw: any): I18nText {
+  const value = raw && typeof raw === 'object' ? raw : {}
+  const ukText = typeof value.uk === 'string' ? value.uk : ''
+  const uaText = typeof value.ua === 'string' ? value.ua : ''
+  const ukrainian = ukText || uaText
+  return {
+    en: typeof value.en === 'string' ? value.en : '',
+    ru: typeof value.ru === 'string' ? value.ru : '',
+    ua: ukrainian,
+    uk: ukrainian,
   }
 }
 
@@ -277,21 +295,35 @@ function mapPayment(raw: any): Payment {
 }
 
 function productToPayload(data: Partial<Product>) {
-  const title = data.title_i18n?.ru || data.title_i18n?.en || data.title || ''
-  const description = data.description_i18n?.ru || data.description_i18n?.en || data.description || ''
-  const importantInfo = data.important_info_i18n?.ru || data.important_info_i18n?.en || data.important_info || ''
+  const titleI18n = normalizePayloadI18n(data.title_i18n, data.title || '')
+  const descriptionI18n = normalizePayloadI18n(data.description_i18n, data.description || '')
+  const importantInfoI18n = normalizePayloadI18n(data.important_info_i18n, data.important_info || '')
+  const title = titleI18n.ru || titleI18n.en || titleI18n.uk || data.title || ''
+  const description = descriptionI18n.ru || descriptionI18n.en || descriptionI18n.uk || data.description || ''
+  const importantInfo = importantInfoI18n.ru || importantInfoI18n.en || importantInfoI18n.uk || data.important_info || ''
   return {
     category_id: idNum(data.category_id || 0),
     title,
-    title_i18n: data.title_i18n || { ru: title },
+    title_i18n: titleI18n,
     description,
-    description_i18n: data.description_i18n || { ru: description },
+    description_i18n: descriptionI18n,
     important_info: importantInfo,
-    important_info_i18n: data.important_info_i18n || { ru: importantInfo },
+    important_info_i18n: importantInfoI18n,
+    activation_link: data.activation_link || '',
     price: String((Number(data.price_cents || 0) / 100).toFixed(2)),
     warranty_label: data.warranty_label || '',
     sort_order: Number(data.sort_order || 0),
   }
+}
+
+function normalizePayloadI18n(data: I18nText | undefined, fallback: string) {
+  const normalized = normalizeProductI18n(data)
+  const result: Record<string, string> = {}
+  if (normalized.en?.trim()) result.en = normalized.en.trim()
+  if (normalized.ru?.trim()) result.ru = normalized.ru.trim()
+  if (normalized.uk?.trim()) result.uk = normalized.uk.trim()
+  if (!result.ru && fallback.trim()) result.ru = fallback.trim()
+  return result
 }
 
 export const session = () => apiFetch<SessionResponse>('GET', '/session')
