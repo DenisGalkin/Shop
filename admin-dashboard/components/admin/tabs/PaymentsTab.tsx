@@ -32,6 +32,13 @@ function dayKey(value: string) {
   return value ? new Date(value).toISOString().slice(5, 10) : ''
 }
 
+function paymentPurpose(tx: Payment) {
+  const purpose = tx.purpose.toLowerCase()
+  if (purpose === 'product_purchase') return tx.product_title || 'Product purchase'
+  if (purpose === 'deposit') return 'Deposit'
+  return tx.purpose || '—'
+}
+
 export default function PaymentsTab() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [search, setSearch] = useState('')
@@ -67,6 +74,7 @@ export default function PaymentsTab() {
       String(p.id).includes(q) ||
       (p.username ?? '').toLowerCase().includes(q) ||
       p.user_name.toLowerCase().includes(q) ||
+      (p.product_title ?? '').toLowerCase().includes(q) ||
       (p.provider_payment_id ?? '').toLowerCase().includes(q) ||
       (p.order_id ? String(p.order_id).includes(q) : false)
     )
@@ -110,7 +118,7 @@ export default function PaymentsTab() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">Платежи</h1>
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">Payments</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Financial operations and payment records</p>
       </div>
 
@@ -201,16 +209,14 @@ export default function PaymentsTab() {
             <thead>
               <tr className="border-b border-border">
                 {[
-                  { label: 'Status', w: 'w-[130px]' },
                   { label: 'ID', w: 'w-[50px]' },
-                  { label: 'Order', w: 'w-[70px]' },
-                  { label: 'User', w: 'w-[160px]' },
-                  { label: 'Type', w: 'w-[80px]' },
-                  { label: 'Purpose', w: 'w-[80px]' },
+                  { label: 'Status', w: 'w-[130px]' },
                   { label: 'Amount', w: 'w-[100px]' },
-                  { label: 'Ext. amount', w: 'w-[110px]' },
-                  { label: 'Provider ID', w: 'w-[140px]' },
+                  { label: 'Type', w: 'w-[80px]' },
+                  { label: 'User', w: 'w-[160px]' },
+                  { label: 'Purpose', w: 'w-[160px]' },
                   { label: 'Created', w: 'w-[120px]' },
+                  { label: 'Provider ID', w: 'w-[140px]' },
                 ].map((col) => (
                   <th key={col.label} className={cn('px-4 py-3 text-left font-semibold uppercase tracking-wide text-muted-foreground', col.w)}>
                     {col.label}
@@ -224,26 +230,23 @@ export default function PaymentsTab() {
                 const StatusIcon = status.icon
                 return (
                   <tr key={tx.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="px-4 py-3.5 font-mono text-muted-foreground">#{tx.id}</td>
                     <td className="px-4 py-3.5">
                       <span className={cn('inline-flex items-center gap-1.5 font-medium px-2 py-1 rounded-full', status.cls)}>
                         <StatusIcon className="w-3 h-3" />{status.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 font-mono text-muted-foreground">#{tx.id}</td>
-                    <td className="px-4 py-3.5 font-mono text-muted-foreground">
-                      {tx.order_id ? `#${tx.order_id}` : <span className="opacity-40">—</span>}
+                    <td className="px-4 py-3.5 font-semibold text-foreground">{fmt(tx.amount_cents)}</td>
+                    <td className="px-4 py-3.5">
+                      <span className="uppercase font-semibold text-foreground">{tx.payment_type || '—'}</span>
                     </td>
                     <td className="px-4 py-3.5 text-foreground">
                       <p className="font-medium truncate max-w-[140px]">{tx.user_name || `ID ${tx.user_id}`}</p>
                       {tx.username && <p className="text-muted-foreground text-[10px]">@{tx.username}</p>}
                     </td>
-                    <td className="px-4 py-3.5">
-                      <span className="uppercase font-semibold text-foreground">{tx.payment_type || '—'}</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-muted-foreground capitalize">{tx.purpose || '—'}</td>
-                    <td className="px-4 py-3.5 font-semibold text-foreground">{fmt(tx.amount_cents)}</td>
-                    <td className="px-4 py-3.5 text-muted-foreground font-mono text-[11px]">
-                      {tx.external_amount ?? <span className="opacity-40">—</span>}
+                    <td className="px-4 py-3.5 text-muted-foreground">{paymentPurpose(tx)}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground whitespace-nowrap">
+                      {tx.created_at ? new Date(tx.created_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
                     <td className="px-4 py-3.5">
                       {tx.provider_payment_id ? (
@@ -257,9 +260,6 @@ export default function PaymentsTab() {
                           </button>
                         </div>
                       ) : <span className="opacity-40">—</span>}
-                    </td>
-                    <td className="px-4 py-3.5 text-muted-foreground whitespace-nowrap">
-                      {tx.created_at ? new Date(tx.created_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                     </td>
                   </tr>
                 )

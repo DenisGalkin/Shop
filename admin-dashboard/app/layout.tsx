@@ -7,8 +7,8 @@ const inter = Inter({ subsets: ['latin', 'cyrillic'] })
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' })
 
 export const metadata: Metadata = {
-  title: 'ShopBot Admin — Панель управления',
-  description: 'Административная панель управления ботом магазина цифровых товаров',
+  title: 'VEXND SHOP Admin',
+  description: 'Administrative dashboard for the VEXND SHOP digital goods bot',
   generator: 'v0.app',
 }
 
@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ru" className="bg-background">
+    <html lang="en" className="bg-background">
       <body className={`${inter.className} ${jetbrainsMono.variable} antialiased`}>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}

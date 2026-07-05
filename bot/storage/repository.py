@@ -864,6 +864,21 @@ class ShopRepository:
         )
         await self.db.commit()
 
+    async def reorder_categories(self, category_ids: Sequence[int]) -> None:
+        for sort_order, category_id in enumerate(category_ids):
+            await self.db.execute(
+                "UPDATE categories SET sort_order = ? WHERE id = ?",
+                (sort_order, category_id),
+            )
+        await self.db.commit()
+
+    async def delete_category(self, category_id: int) -> None:
+        product_row = await self._fetchone("SELECT 1 FROM products WHERE category_id = ? LIMIT 1", (category_id,))
+        if product_row:
+            raise ValueError("Delete all products in this category first")
+        await self.db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+        await self.db.commit()
+
     async def list_products(self, category_id: int, only_active: bool = True) -> list[dict[str, Any]]:
         await self.release_expired_reservations()
         query = """
@@ -1051,6 +1066,25 @@ class ShopRepository:
             (product_id,),
         )
         await self.db.commit()
+
+    async def reorder_products(self, product_ids: Sequence[int]) -> None:
+        for sort_order, product_id in enumerate(product_ids):
+            await self.db.execute(
+                "UPDATE products SET sort_order = ? WHERE id = ?",
+                (sort_order, product_id),
+            )
+        await self.db.commit()
+
+    async def delete_product(self, product_id: int) -> None:
+        try:
+            await self.db.execute("DELETE FROM stock_items WHERE product_id = ?", (product_id,))
+            cursor = await self.db.execute("DELETE FROM products WHERE id = ?", (product_id,))
+            await self.db.commit()
+        except aiosqlite.IntegrityError as exc:
+            await self.db.rollback()
+            raise ValueError("This product cannot be deleted because it already has related orders, payments, or reserved keys") from exc
+        if (cursor.rowcount or 0) == 0:
+            raise ValueError("Product not found")
 
     async def add_stock_items(self, product_id: int, keys: Sequence[str]) -> tuple[int, int]:
         added = 0

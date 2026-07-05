@@ -37,17 +37,17 @@ function LoginScreen({ onReady }: { onReady: () => void }) {
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-card border border-border p-6 shadow-2xl shadow-black/30">
         <div className="mb-6">
-          <p className="text-2xl font-bold text-foreground">ShopBot</p>
-          <p className="text-sm text-muted-foreground mt-1">Вход в панель управления</p>
+          <p className="text-2xl font-bold text-foreground">VEXND SHOP</p>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to the admin panel</p>
         </div>
-        <label className="block text-xs text-muted-foreground mb-1.5">Логин</label>
+        <label className="block text-xs text-muted-foreground mb-1.5">Username</label>
         <input
           value={username}
           onChange={(event) => setUsername(event.target.value)}
           className="w-full bg-surface-raised border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 mb-4"
           autoComplete="username"
         />
-        <label className="block text-xs text-muted-foreground mb-1.5">Пароль</label>
+        <label className="block text-xs text-muted-foreground mb-1.5">Password</label>
         <input
           type="password"
           value={password}
@@ -60,7 +60,7 @@ function LoginScreen({ onReady }: { onReady: () => void }) {
           disabled={loading}
           className="mt-5 w-full rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium py-2.5 hover:bg-neon/25 transition-colors disabled:opacity-60"
         >
-          {loading ? 'Проверяю...' : 'Войти'}
+          {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
     </div>
@@ -92,7 +92,7 @@ export default function AdminShell() {
   }
 
   if (loading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">Загрузка панели...</div>
+    return <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">Loading dashboard...</div>
   }
 
   if (!authenticated) {
@@ -115,7 +115,7 @@ export default function AdminShell() {
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar active={activeTab} onChange={setActiveTab} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header activeTab={activeTab} onLogout={handleLogout} />
+        <Header activeTab={activeTab} onLogout={handleLogout} onChangeTab={setActiveTab} />
         <main className="flex-1 overflow-y-auto p-6">
           {renderTab()}
         </main>

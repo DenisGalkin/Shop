@@ -16,13 +16,13 @@ import { cn } from '@/lib/utils'
 export type TabId = 'overview' | 'products' | 'categories' | 'users' | 'orders' | 'payments' | 'settings'
 
 const navItems: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: 'overview', label: 'Обзор', icon: LayoutDashboard },
-  { id: 'products', label: 'Товары', icon: Package },
-  { id: 'categories', label: 'Категории', icon: Tag },
-  { id: 'users', label: 'Пользователи', icon: Users },
-  { id: 'orders', label: 'Заказы', icon: ShoppingCart },
-  { id: 'payments', label: 'Платежи', icon: CreditCard },
-  { id: 'settings', label: 'Настройки', icon: Settings },
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'products', label: 'Products', icon: Package },
+  { id: 'categories', label: 'Categories', icon: Tag },
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'orders', label: 'Orders', icon: ShoppingCart },
+  { id: 'payments', label: 'Payments', icon: CreditCard },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
 interface SidebarProps {
@@ -39,7 +39,7 @@ export default function Sidebar({ active, onChange }: SidebarProps) {
           <Bot className="w-5 h-5 text-neon" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-foreground leading-none">ShopBot</p>
+          <p className="text-sm font-semibold text-foreground leading-none">VEXND SHOP</p>
           <p className="text-xs text-muted-foreground mt-0.5">Admin Panel</p>
         </div>
       </div>

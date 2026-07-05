@@ -90,6 +90,7 @@ export type Payment = {
   username: string | null
   order_id: number | null
   external_amount: string | null
+  product_title: string | null
 }
 
 export type DashboardData = {
@@ -98,6 +99,10 @@ export type DashboardData = {
   categoryData: Array<{ name: string; value: number; color: string }>
   weeklyOrders: Array<{ day: string; orders: number }>
   recentOrders: Order[]
+  lowStock: Product[]
+  outOfStock: Product[]
+  hiddenStockedProducts: Product[]
+  emptyCategories: Category[]
 }
 
 export type SessionResponse = {
@@ -263,6 +268,7 @@ function mapPayment(raw: any): Payment {
     username: raw.username || null,
     order_id: raw.order_id ?? null,
     external_amount: raw.external_amount || null,
+    product_title: raw.product_title || null,
   }
 }
 
@@ -316,7 +322,13 @@ export async function toggleCategory(id: string): Promise<Category> {
   return mapCategory(res.item)
 }
 
-export async function reorderCategories(_: string[]): Promise<void> {}
+export async function deleteCategory(id: string): Promise<void> {
+  await apiFetch<{ ok: true }>('DELETE', `/categories/${idNum(id)}`)
+}
+
+export async function reorderCategories(ids: string[]): Promise<void> {
+  await apiFetch<{ ok: true }>('POST', '/categories/reorder', { ids: ids.map(idNum) })
+}
 
 export async function getProducts(): Promise<Product[]> {
   const res = await apiFetch<{ ok: true; items: any[] }>('GET', '/products')
@@ -338,7 +350,13 @@ export async function toggleProduct(id: string): Promise<Product> {
   return mapProduct(res.item)
 }
 
-export async function reorderProducts(_: string[]): Promise<void> {}
+export async function deleteProduct(id: string): Promise<void> {
+  await apiFetch<{ ok: true }>('DELETE', `/products/${idNum(id)}`)
+}
+
+export async function reorderProducts(ids: string[]): Promise<void> {
+  await apiFetch<{ ok: true }>('POST', '/products/reorder', { ids: ids.map(idNum) })
+}
 
 export async function uploadProductKeys(id: string, keys: string[]): Promise<{ added: number; skipped: number }> {
   const res = await apiFetch<{ ok: true; added: number; skipped: number }>('POST', `/products/${idNum(id)}/stock`, {
@@ -416,5 +434,9 @@ export async function getDashboard(): Promise<DashboardData> {
     categoryData,
     weeklyOrders,
     recentOrders: (dashboard.recent_orders || []).map(mapOrder),
+    lowStock: (dashboard.low_stock || []).map(mapProduct),
+    outOfStock: (dashboard.out_of_stock || []).map(mapProduct),
+    hiddenStockedProducts: (dashboard.hidden_stocked_products || []).map(mapProduct),
+    emptyCategories: (dashboard.empty_categories || []).map(mapCategory),
   }
 }

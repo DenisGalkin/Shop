@@ -138,11 +138,6 @@ function UserModal({ user, onClose, onAdjustBalance }: { user: User; onClose: ()
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex justify-end shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
-            Close
-          </button>
-        </div>
       </div>
     </div>
   )
@@ -225,7 +220,7 @@ export default function UsersTab() {
       {error && <div className="rounded-xl border border-red-400/20 bg-red-400/10 text-red-400 text-sm px-4 py-3">{error}</div>}
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">Пользователи</h1>
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">Users</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Telegram bot user management</p>
       </div>
 
@@ -278,9 +273,8 @@ export default function UsersTab() {
       {/* Table */}
       <div className="rounded-2xl bg-card border border-border overflow-x-auto">
         {/* Table header */}
-        <div className="min-w-[700px] grid grid-cols-[60px_50px_2fr_1fr_1fr_1fr_1fr_44px] gap-3 px-5 py-3 border-b border-border">
+        <div className="min-w-[700px] grid grid-cols-[60px_2fr_1fr_1fr_1fr_1fr_44px] gap-3 px-5 py-3 border-b border-border">
           {colHdr('ID', 'id')}
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">TG ID</span>
           {colHdr('User', 'full_name')}
           {colHdr('Status', 'status')}
           {colHdr('Orders', 'orders')}
@@ -297,15 +291,10 @@ export default function UsersTab() {
               <div
                 key={user.id}
                 onClick={() => setSelectedUser(user)}
-                className="grid grid-cols-[60px_50px_2fr_1fr_1fr_1fr_1fr_44px] gap-3 px-5 py-3.5 items-center hover:bg-white/[0.03] transition-colors cursor-pointer group"
+                className="grid grid-cols-[60px_2fr_1fr_1fr_1fr_1fr_44px] gap-3 px-5 py-3.5 items-center hover:bg-white/[0.03] transition-colors cursor-pointer group"
               >
                 {/* ID */}
                 <span className="text-xs font-mono text-muted-foreground">#{user.id}</span>
-
-                {/* TG ID (shortened) */}
-                <span className="text-[11px] font-mono text-muted-foreground truncate" title={String(user.tg_id)}>
-                  {String(user.tg_id).slice(0, 6)}…
-                </span>
 
                 {/* User */}
                 <div className="flex items-center gap-2.5 min-w-0">

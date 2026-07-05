@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Edit2, EyeOff, Eye, GripVertical, X, Tag } from 'lucide-react'
+import { Plus, Edit2, EyeOff, Eye, GripVertical, X, Tag, Trash2 } from 'lucide-react'
 import {
   createCategory,
+  deleteCategory,
   getCategories,
   reorderCategories,
   toggleCategory,
@@ -119,10 +120,12 @@ function SortableCategoryRow({
   category,
   onEdit,
   onToggle,
+  onDelete,
 }: {
   category: Category
   onEdit: () => void
   onToggle: () => void
+  onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: category.id })
   const style = { transform: CSS.Transform.toString(transform), transition }
@@ -181,6 +184,9 @@ function SortableCategoryRow({
             ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
             : <Eye className="w-3.5 h-3.5 text-emerald-400" />}
         </button>
+        <button onClick={onDelete} title="Delete" className="w-7 h-7 rounded-lg hover:bg-red-500/10 flex items-center justify-center transition-colors">
+          <Trash2 className="w-3.5 h-3.5 text-red-400" />
+        </button>
       </div>
     </div>
   )
@@ -208,12 +214,14 @@ export default function CategoriesTab() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (over && active.id !== over.id) {
-      setItems((prev) => {
-        const oldIndex = prev.findIndex((c) => c.id === active.id)
-        const newIndex = prev.findIndex((c) => c.id === over.id)
-        const next = arrayMove(prev, oldIndex, newIndex).map((c, i) => ({ ...c, sort_order: i }))
-        reorderCategories(next.map((category) => category.id)).catch((err) => setError(err instanceof Error ? err.message : 'Failed to reorder categories'))
-        return next
+      const previous = items
+      const oldIndex = previous.findIndex((c) => c.id === active.id)
+      const newIndex = previous.findIndex((c) => c.id === over.id)
+      const next = arrayMove(previous, oldIndex, newIndex).map((c, i) => ({ ...c, sort_order: i }))
+      setItems(next)
+      reorderCategories(next.map((category) => category.id)).catch((err) => {
+        setItems(previous)
+        setError(err instanceof Error ? err.message : 'Failed to reorder categories')
       })
     }
   }
@@ -241,13 +249,24 @@ export default function CategoriesTab() {
     }
   }
 
+  const handleDelete = async (category: Category) => {
+    const confirmed = window.confirm(`Delete category "${category.title}"?`)
+    if (!confirmed) return
+    try {
+      await deleteCategory(category.id)
+      setItems((prev) => prev.filter((item) => item.id !== category.id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete category')
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {error && <div className="rounded-xl border border-red-400/20 bg-red-400/10 text-red-400 text-sm px-4 py-3">{error}</div>}
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Категории</h1>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Categories</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {items.length} categories · {items.filter((c) => c.is_active).length} visible
           </p>
@@ -287,6 +306,7 @@ export default function CategoriesTab() {
                   category={cat}
                   onEdit={() => setEditCategory(cat)}
                   onToggle={() => toggleVisibility(cat.id)}
+                  onDelete={() => handleDelete(cat)}
                 />
               ))}
             </div>

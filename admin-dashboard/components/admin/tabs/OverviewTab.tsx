@@ -52,7 +52,7 @@ export default function OverviewTab() {
   }, [])
 
   if (error) return <div className="rounded-xl border border-red-400/20 bg-red-400/10 text-red-400 text-sm px-4 py-3">{error}</div>
-  if (!data) return <div className="text-sm text-muted-foreground">Загрузка...</div>
+  if (!data) return <div className="text-sm text-muted-foreground">Loading...</div>
 
   const stats = data.stats
   const kpis = [

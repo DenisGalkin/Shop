@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import {
   Search, Plus, AlertTriangle, XCircle, Edit2, Key, EyeOff, Eye,
-  GripVertical, X, ChevronDown,
+  GripVertical, X, ChevronDown, Trash2,
 } from 'lucide-react'
 import {
   createProduct,
+  deleteProduct,
   getCategories,
   getProducts,
   reorderProducts,
@@ -339,11 +340,13 @@ function SortableProductCard({
   onEdit,
   onKeys,
   onToggleVisibility,
+  onDelete,
 }: {
   product: Product
   onEdit: () => void
   onKeys: () => void
   onToggleVisibility: () => void
+  onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: product.id })
   const style = { transform: CSS.Transform.toString(transform), transition }
@@ -402,6 +405,13 @@ function SortableProductCard({
             {product.is_active
               ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
               : <Eye className="w-3.5 h-3.5 text-emerald-400" />}
+          </button>
+          <button
+            onClick={onDelete}
+            title="Delete"
+            className="w-7 h-7 rounded-lg hover:bg-red-500/10 flex items-center justify-center transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-400" />
           </button>
         </div>
       </div>
@@ -464,12 +474,14 @@ export default function ProductsTab() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (over && active.id !== over.id) {
-      setItems((prev) => {
-        const oldIndex = prev.findIndex((p) => p.id === active.id)
-        const newIndex = prev.findIndex((p) => p.id === over.id)
-        const next = arrayMove(prev, oldIndex, newIndex).map((p, i) => ({ ...p, sort_order: i }))
-        reorderProducts(next.map((product) => product.id)).catch((err) => setError(err instanceof Error ? err.message : 'Failed to reorder products'))
-        return next
+      const previous = items
+      const oldIndex = previous.findIndex((p) => p.id === active.id)
+      const newIndex = previous.findIndex((p) => p.id === over.id)
+      const next = arrayMove(previous, oldIndex, newIndex).map((p, i) => ({ ...p, sort_order: i }))
+      setItems(next)
+      reorderProducts(next.map((product) => product.id)).catch((err) => {
+        setItems(previous)
+        setError(err instanceof Error ? err.message : 'Failed to reorder products')
       })
     }
   }
@@ -506,6 +518,17 @@ export default function ProductsTab() {
     }
   }
 
+  const handleDelete = async (product: Product) => {
+    const confirmed = window.confirm(`Delete product "${product.title}"?`)
+    if (!confirmed) return
+    try {
+      await deleteProduct(product.id)
+      setItems((prev) => prev.filter((item) => item.id !== product.id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete product')
+    }
+  }
+
   const filtered = items.filter((p) => {
     const q = search.toLowerCase()
     const matchSearch = p.title.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
@@ -523,7 +546,7 @@ export default function ProductsTab() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Товары</h1>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Products</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{items.length} products in catalog</p>
         </div>
         <button
@@ -597,6 +620,7 @@ export default function ProductsTab() {
                 onEdit={() => setEditProduct(product)}
                 onKeys={() => setKeysProduct(product)}
                 onToggleVisibility={() => toggleVisibility(product.id)}
+                onDelete={() => handleDelete(product)}
               />
             ))}
           </div>

@@ -5,28 +5,28 @@ import { Bell, Bot, CreditCard, Lock, Palette, Shield } from 'lucide-react'
 const sections = [
   {
     icon: Bot,
-    title: 'Настройки бота',
-    description: 'Имя, тексты, режим обслуживания и авто-доставка',
+    title: 'Bot settings',
+    description: 'Bot name, texts, maintenance mode, and auto-delivery',
   },
   {
     icon: CreditCard,
-    title: 'Платежные методы',
-    description: 'Провайдеры оплаты и базовая валюта',
+    title: 'Payment methods',
+    description: 'Payment providers and base currency',
   },
   {
     icon: Bell,
-    title: 'Уведомления',
-    description: 'Алерты администратора и события магазина',
+    title: 'Notifications',
+    description: 'Admin alerts and store events',
   },
   {
     icon: Shield,
-    title: 'Безопасность',
-    description: 'Пароль, сессии и журнал действий',
+    title: 'Security',
+    description: 'Password, sessions, and activity log',
   },
   {
     icon: Palette,
-    title: 'Интерфейс',
-    description: 'Язык и часовой пояс панели',
+    title: 'Interface',
+    description: 'Dashboard language and time zone',
   },
 ]
 
@@ -34,8 +34,8 @@ export default function SettingsTab() {
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">Настройки</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Раздел временно закрыт для изменений</p>
+        <h1 className="text-2xl font-bold text-foreground tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">This section is temporarily locked for changes</p>
       </div>
 
       <div className="rounded-2xl bg-card border border-border p-6">
@@ -44,9 +44,9 @@ export default function SettingsTab() {
             <Lock className="w-5 h-5 text-neon" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-foreground">Настройки пока не подключены</h2>
+            <h2 className="text-base font-semibold text-foreground">Settings are not wired yet</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Управление настройками оставлено без активных кнопок и фальшивых значений. Остальные разделы панели работают через API проекта.
+              Settings management is intentionally left without fake values or inactive controls. The rest of the dashboard already works through the project API.
             </p>
           </div>
         </div>

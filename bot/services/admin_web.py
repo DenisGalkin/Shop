@@ -406,6 +406,36 @@ async def admin_category_toggle(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "item": _serialize_category(category or {})})
 
 
+async def admin_categories_reorder(request: web.Request) -> web.Response:
+    await _require_admin(request)
+    repo: ShopRepository = request.app["repo"]
+    payload = await _get_json(request)
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or not ids:
+        return _json_error("Category IDs are required")
+    try:
+        category_ids = [int(item) for item in ids]
+    except (TypeError, ValueError):
+        return _json_error("Category IDs must be numeric")
+    await repo.reorder_categories(category_ids)
+    categories = [*_map(_serialize_category, await repo.list_admin_categories())]
+    return web.json_response({"ok": True, "items": categories})
+
+
+async def admin_category_delete(request: web.Request) -> web.Response:
+    await _require_admin(request)
+    repo: ShopRepository = request.app["repo"]
+    category_id = int(request.match_info["category_id"])
+    category = await repo.get_category(category_id)
+    if not category:
+        return _json_error("Category not found", status=404)
+    try:
+        await repo.delete_category(category_id)
+    except ValueError as exc:
+        return _json_error(str(exc), status=409)
+    return web.json_response({"ok": True})
+
+
 async def admin_products(request: web.Request) -> web.Response:
     await _require_admin(request)
     repo: ShopRepository = request.app["repo"]
@@ -497,6 +527,37 @@ async def admin_product_toggle(request: web.Request) -> web.Response:
     await repo.toggle_product(product_id)
     product = await repo.get_product(product_id)
     return web.json_response({"ok": True, "item": _serialize_product(product or {})})
+
+
+async def admin_products_reorder(request: web.Request) -> web.Response:
+    await _require_admin(request)
+    repo: ShopRepository = request.app["repo"]
+    payload = await _get_json(request)
+    ids = payload.get("ids")
+    if not isinstance(ids, list) or not ids:
+        return _json_error("Product IDs are required")
+    try:
+        product_ids = [int(item) for item in ids]
+    except (TypeError, ValueError):
+        return _json_error("Product IDs must be numeric")
+    await repo.reorder_products(product_ids)
+    products = [*_map(_serialize_product, await repo.list_admin_products())]
+    return web.json_response({"ok": True, "items": products})
+
+
+async def admin_product_delete(request: web.Request) -> web.Response:
+    await _require_admin(request)
+    repo: ShopRepository = request.app["repo"]
+    product_id = int(request.match_info["product_id"])
+    product = await repo.get_product(product_id)
+    if not product:
+        return _json_error("Product not found", status=404)
+    try:
+        await repo.delete_product(product_id)
+    except ValueError as exc:
+        status = 404 if str(exc) == "Product not found" else 409
+        return _json_error(str(exc), status=status)
+    return web.json_response({"ok": True})
 
 
 async def admin_product_stock(request: web.Request) -> web.Response:
@@ -637,10 +698,14 @@ def setup_admin_routes(app: web.Application) -> None:
     app.router.add_post("/admin/api/categories", admin_categories)
     app.router.add_patch("/admin/api/categories/{category_id:\\d+}", admin_category_update)
     app.router.add_post("/admin/api/categories/{category_id:\\d+}/toggle", admin_category_toggle)
+    app.router.add_delete("/admin/api/categories/{category_id:\\d+}", admin_category_delete)
+    app.router.add_post("/admin/api/categories/reorder", admin_categories_reorder)
     app.router.add_get("/admin/api/products", admin_products)
     app.router.add_post("/admin/api/products", admin_products)
     app.router.add_patch("/admin/api/products/{product_id:\\d+}", admin_product_update)
     app.router.add_post("/admin/api/products/{product_id:\\d+}/toggle", admin_product_toggle)
+    app.router.add_delete("/admin/api/products/{product_id:\\d+}", admin_product_delete)
+    app.router.add_post("/admin/api/products/reorder", admin_products_reorder)
     app.router.add_post("/admin/api/products/{product_id:\\d+}/stock", admin_product_stock)
     app.router.add_get("/admin/api/products/{product_id:\\d+}/stock-items", admin_product_stock_items)
     app.router.add_delete("/admin/api/products/{product_id:\\d+}/stock-items/{stock_item_id:\\d+}", admin_product_stock_item_delete)
