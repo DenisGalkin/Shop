@@ -81,6 +81,7 @@ export type Payment = {
   purpose: string
   provider_payment_id: string | null
   provider_invoice_id: number | null
+  provider_invoice_url: string | null
   provider_status: string
   error_text: string | null
   created_at: string
@@ -104,6 +105,8 @@ export type DashboardData = {
   hiddenStockedProducts: Product[]
   emptyCategories: Category[]
 }
+
+type RevenuePoint = { date: string; revenue: number; orders: number }
 
 export type SessionResponse = {
   ok: true
@@ -259,6 +262,7 @@ function mapPayment(raw: any): Payment {
     purpose: raw.purpose || '',
     provider_payment_id: raw.provider_payment_id || null,
     provider_invoice_id: raw.provider_invoice_id ?? null,
+    provider_invoice_url: raw.provider_invoice_url || null,
     provider_status: raw.provider_status || '',
     error_text: raw.error_text || null,
     created_at: raw.created_at || '',
@@ -416,7 +420,7 @@ export async function getDashboard(): Promise<DashboardData> {
     apiFetch<any>('GET', '/dashboard'),
     getCategories(),
   ])
-  const revenueData = (dashboard.series || []).map((row: any) => ({
+  const revenueData: RevenuePoint[] = (dashboard.series || []).map((row: any) => ({
     date: dayLabel(row.day),
     revenue: Math.round(Number(row.revenue_cents || 0) / 100),
     orders: Number(row.orders_count || 0),

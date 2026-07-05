@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CreditCard, CheckCircle2, Clock, XCircle, RotateCcw,
-  Search, TrendingUp, Copy,
+  Search, TrendingUp, Copy, ExternalLink,
 } from 'lucide-react'
 import { getPayments, type Payment } from '@/lib/api'
 import {
@@ -27,6 +27,8 @@ const methodMeta: Record<string, { label: string; symbol: string; cls: string; a
   lolz: { label: 'Lolzteam', symbol: 'L', cls: 'border-indigo-400/20 bg-indigo-400/5', accentCls: 'text-indigo-400', key: 'lolz' },
   balance: { label: 'Balance', symbol: '$', cls: 'border-neon/20 bg-neon/5', accentCls: 'text-neon', key: 'balance' },
 }
+
+type PaymentFlowRow = { date: string } & Record<string, number | string>
 
 function dayKey(value: string) {
   return value ? new Date(value).toISOString().slice(5, 10) : ''
@@ -99,12 +101,12 @@ export default function PaymentsTab() {
   const monthlyFlow = useMemo(() => {
     const buckets = payments
       .filter((p) => p.status === 'confirmed')
-      .reduce<Record<string, Record<string, number>>>((acc, payment) => {
+      .reduce<Record<string, PaymentFlowRow>>((acc, payment) => {
         const date = dayKey(payment.created_at)
         if (!date) return acc
         const key = (payment.payment_type || 'balance').toLowerCase()
         acc[date] = acc[date] || { date }
-        acc[date][key] = (acc[date][key] || 0) + Math.round(payment.amount_cents / 100)
+        acc[date][key] = Number(acc[date][key] || 0) + Math.round(payment.amount_cents / 100)
         return acc
       }, {})
     return Object.values(buckets).sort((a, b) => a.date.localeCompare(b.date)).slice(-10)
@@ -217,6 +219,7 @@ export default function PaymentsTab() {
                   { label: 'Purpose', w: 'w-[160px]' },
                   { label: 'Created', w: 'w-[120px]' },
                   { label: 'Provider ID', w: 'w-[140px]' },
+                  { label: '', w: 'w-[52px]' },
                 ].map((col) => (
                   <th key={col.label} className={cn('px-4 py-3 text-left font-semibold uppercase tracking-wide text-muted-foreground', col.w)}>
                     {col.label}
@@ -260,6 +263,23 @@ export default function PaymentsTab() {
                           </button>
                         </div>
                       ) : <span className="opacity-40">—</span>}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {tx.provider_invoice_url ? (
+                        <div className="flex justify-end">
+                          <a
+                            href={tx.provider_invoice_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`Open payment ${tx.id} invoice`}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-white/10 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="opacity-40">—</span>
+                      )}
                     </td>
                   </tr>
                 )

@@ -30,6 +30,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
+const CATEGORY_TABLE_COLUMNS = 'grid-cols-[32px_minmax(0,1.6fr)_minmax(180px,0.95fr)_72px_104px]'
+
 // ── Category Modal ────────────────────────────────────────────────────────────
 interface CategoryModalProps {
   category?: Category
@@ -135,7 +137,7 @@ function SortableCategoryRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'group grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 items-center px-5 py-4 hover:bg-white/[0.03] transition-colors',
+        `group grid ${CATEGORY_TABLE_COLUMNS} gap-4 items-center px-5 py-4 hover:bg-white/[0.03] transition-colors`,
         isDragging && 'opacity-50 bg-white/5',
         !category.is_active && 'opacity-60',
       )}
@@ -161,7 +163,7 @@ function SortableCategoryRow({
       </div>
 
       {/* Emoji ID */}
-      <div className="hidden sm:block text-right">
+      <div className="text-right">
         {category.premium_emoji_id ? (
           <span className="font-mono text-[11px] text-muted-foreground bg-surface-raised border border-border px-2 py-0.5 rounded-lg">
             {category.premium_emoji_id.length > 12 ? `${category.premium_emoji_id.slice(0, 12)}…` : category.premium_emoji_id}
@@ -175,7 +177,7 @@ function SortableCategoryRow({
       <span className="text-xs text-muted-foreground w-8 text-right">#{category.sort_order + 1}</span>
 
       {/* Actions */}
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex w-[104px] justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button onClick={onEdit} title="Edit" className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
           <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
@@ -287,38 +289,40 @@ export default function CategoriesTab() {
       </div>
 
       {/* Table */}
-      <div className="rounded-2xl bg-card border border-border overflow-hidden">
+      <div className="rounded-2xl bg-card border border-border overflow-x-auto">
         {/* Header */}
-        <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-5 py-3 border-b border-border">
-          <span className="w-6" />
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
-          <span className="hidden sm:block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Emoji ID</span>
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground w-8 text-right">Order</span>
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground w-16 text-center">Actions</span>
-        </div>
-
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={items.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-            <div className="divide-y divide-border">
-              {items.map((cat) => (
-                <SortableCategoryRow
-                  key={cat.id}
-                  category={cat}
-                  onEdit={() => setEditCategory(cat)}
-                  onToggle={() => toggleVisibility(cat.id)}
-                  onDelete={() => handleDelete(cat)}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        {items.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <Tag className="w-8 h-8 mx-auto mb-2 opacity-30" />
-            <p className="text-sm">No categories yet</p>
+        <div className="min-w-[720px]">
+          <div className={cn('grid gap-4 px-5 py-3 border-b border-border', CATEGORY_TABLE_COLUMNS)}>
+            <span className="w-6" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Emoji ID</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Order</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Actions</span>
           </div>
-        )}
+
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={items.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+              <div className="divide-y divide-border">
+                {items.map((cat) => (
+                  <SortableCategoryRow
+                    key={cat.id}
+                    category={cat}
+                    onEdit={() => setEditCategory(cat)}
+                    onToggle={() => toggleVisibility(cat.id)}
+                    onDelete={() => handleDelete(cat)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+
+          {items.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Tag className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No categories yet</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Modal */}

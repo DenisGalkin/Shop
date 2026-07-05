@@ -330,9 +330,20 @@ export default function UsersTab() {
 
                 {/* Action */}
                 <div className="flex justify-end">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10">
-                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-                  </div>
+                  {user.username ? (
+                    <a
+                      href={`https://t.me/${user.username}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Open @${user.username} in Telegram`}
+                      onClick={(event) => event.stopPropagation()}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                    </a>
+                  ) : (
+                    <div className="w-7 h-7" />
+                  )}
                 </div>
               </div>
             )
