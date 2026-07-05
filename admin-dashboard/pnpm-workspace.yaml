@@ -11,3 +11,5 @@ overrides:
 onlyBuiltDependencies:
   - msw
   - sharp
+
+minimumReleaseAge: 0
