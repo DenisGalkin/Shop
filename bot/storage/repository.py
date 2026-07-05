@@ -1110,6 +1110,30 @@ class ShopRepository:
         if payment_row:
             raise ValueError("This product cannot be deleted because it already has related payments")
 
+        stock_item_order_row = await self._fetchone(
+            """
+            SELECT 1
+            FROM orders
+            WHERE stock_item_id IN (SELECT id FROM stock_items WHERE product_id = ?)
+            LIMIT 1
+            """,
+            (product_id,),
+        )
+        if stock_item_order_row:
+            raise ValueError("This product cannot be deleted because some of its keys are linked to orders")
+
+        stock_item_payment_row = await self._fetchone(
+            """
+            SELECT 1
+            FROM payments
+            WHERE reserved_stock_item_id IN (SELECT id FROM stock_items WHERE product_id = ?)
+            LIMIT 1
+            """,
+            (product_id,),
+        )
+        if stock_item_payment_row:
+            raise ValueError("This product cannot be deleted because some of its keys are linked to payments")
+
         reserved_stock_row = await self._fetchone(
             """
             SELECT 1
@@ -1128,6 +1152,7 @@ class ShopRepository:
             raise ValueError("This product cannot be deleted because it has sold or reserved keys")
 
         try:
+            await self.db.execute("DELETE FROM stock_notifications WHERE product_id = ?", (product_id,))
             await self.db.execute("DELETE FROM stock_items WHERE product_id = ?", (product_id,))
             cursor = await self.db.execute("DELETE FROM products WHERE id = ?", (product_id,))
             await self.db.commit()
