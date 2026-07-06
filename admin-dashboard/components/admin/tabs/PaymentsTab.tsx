@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CreditCard, CheckCircle2, Clock, XCircle, RotateCcw,
-  Search, TrendingUp, Copy, ExternalLink,
+  Search, TrendingUp, Copy, ExternalLink, ChevronUp, ChevronDown, ChevronsUpDown,
 } from 'lucide-react'
 import { getPayments, type Payment } from '@/lib/api'
 import {
@@ -28,6 +28,23 @@ const methodMeta: Record<string, { label: string; symbol: string; cls: string; a
   balance: { label: 'Balance', symbol: '$', cls: 'border-neon/20 bg-neon/5', accentCls: 'text-neon', key: 'balance' },
 }
 
+type SortKey = 'id' | 'status' | 'amount_cents' | 'payment_type' | 'user_name' | 'purpose' | 'created_at' | 'provider_payment_id'
+type SortDir = 'asc' | 'desc'
+
+function SortBtn({ col, sortKey, sortDir, onClick }: { col: SortKey; sortKey: SortKey; sortDir: SortDir; onClick: () => void }) {
+  const active = col === sortKey
+  return (
+    <button
+      onClick={onClick}
+      className={cn('flex items-center gap-0.5 text-left text-[11px] font-semibold uppercase tracking-wide transition-colors', active ? 'text-neon' : 'text-muted-foreground hover:text-foreground')}
+    >
+      {active
+        ? (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)
+        : <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+    </button>
+  )
+}
+
 type PaymentFlowRow = { date: string } & Record<string, number | string>
 
 function dayKey(value: string) {
@@ -44,6 +61,8 @@ function paymentPurpose(tx: Payment) {
 export default function PaymentsTab() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [search, setSearch] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('created_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [copied, setCopied] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -70,17 +89,47 @@ export default function PaymentsTab() {
     setTimeout(() => setCopied(null), 1500)
   }
 
-  const filtered = useMemo(() => payments.filter((p) => {
-    const q = search.toLowerCase()
-    return (
-      String(p.id).includes(q) ||
-      (p.username ?? '').toLowerCase().includes(q) ||
-      p.user_name.toLowerCase().includes(q) ||
-      (p.product_title ?? '').toLowerCase().includes(q) ||
-      (p.provider_payment_id ?? '').toLowerCase().includes(q) ||
-      (p.order_id ? String(p.order_id).includes(q) : false)
-    )
-  }), [payments, search])
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((dir) => (dir === 'asc' ? 'desc' : 'asc'))
+    else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  const filtered = useMemo(() => payments
+    .filter((p) => {
+      const q = search.toLowerCase()
+      return (
+        String(p.id).includes(q) ||
+        (p.username ?? '').toLowerCase().includes(q) ||
+        p.user_name.toLowerCase().includes(q) ||
+        (p.product_title ?? '').toLowerCase().includes(q) ||
+        (p.provider_payment_id ?? '').toLowerCase().includes(q) ||
+        (p.order_id ? String(p.order_id).includes(q) : false)
+      )
+    })
+    .sort((a, b) => {
+      let av: number | string | null = a[sortKey]
+      let bv: number | string | null = b[sortKey]
+
+      if (sortKey === 'purpose') {
+        av = paymentPurpose(a)
+        bv = paymentPurpose(b)
+      }
+
+      if (sortKey === 'id' || sortKey === 'amount_cents') {
+        const aNum = Number(av || 0)
+        const bNum = Number(bv || 0)
+        return sortDir === 'asc' ? aNum - bNum : bNum - aNum
+      }
+
+      const aStr = String(av || '').toLowerCase()
+      const bStr = String(bv || '').toLowerCase()
+      return sortDir === 'asc'
+        ? (aStr < bStr ? -1 : aStr > bStr ? 1 : 0)
+        : (aStr > bStr ? -1 : aStr < bStr ? 1 : 0)
+    }), [payments, search, sortDir, sortKey])
 
   const cryptoCards = useMemo(() => {
     const confirmed = payments.filter((p) => p.status === 'confirmed')
@@ -116,6 +165,13 @@ export default function PaymentsTab() {
     const keys = Array.from(new Set(monthlyFlow.flatMap((row) => Object.keys(row).filter((key) => key !== 'date'))))
     return keys.slice(0, 3)
   }, [monthlyFlow])
+
+  const colHdr = (label: string, key: SortKey) => (
+    <div className="flex items-center gap-1">
+      <span>{label}</span>
+      <SortBtn col={key} sortKey={sortKey} sortDir={sortDir} onClick={() => handleSort(key)} />
+    </div>
+  )
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -211,17 +267,17 @@ export default function PaymentsTab() {
             <thead>
               <tr className="border-b border-border">
                 {[
-                  { label: 'ID', w: 'w-[50px]' },
-                  { label: 'Status', w: 'w-[130px]' },
-                  { label: 'Amount', w: 'w-[100px]' },
-                  { label: 'Type', w: 'w-[80px]' },
-                  { label: 'User', w: 'w-[160px]' },
-                  { label: 'Purpose', w: 'w-[160px]' },
-                  { label: 'Created', w: 'w-[120px]' },
-                  { label: 'Provider ID', w: 'w-[140px]' },
-                  { label: '', w: 'w-[52px]' },
+                  { key: 'id', label: colHdr('ID', 'id'), w: 'w-[50px]' },
+                  { key: 'status', label: colHdr('Status', 'status'), w: 'w-[130px]' },
+                  { key: 'amount', label: colHdr('Amount', 'amount_cents'), w: 'w-[100px]' },
+                  { key: 'type', label: colHdr('Type', 'payment_type'), w: 'w-[80px]' },
+                  { key: 'user', label: colHdr('User', 'user_name'), w: 'w-[160px]' },
+                  { key: 'purpose', label: colHdr('Purpose', 'purpose'), w: 'w-[160px]' },
+                  { key: 'created', label: colHdr('Created', 'created_at'), w: 'w-[120px]' },
+                  { key: 'provider', label: colHdr('Provider ID', 'provider_payment_id'), w: 'w-[140px]' },
+                  { key: 'actions', label: <span />, w: 'w-[52px]' },
                 ].map((col) => (
-                  <th key={col.label} className={cn('px-4 py-3 text-left font-semibold uppercase tracking-wide text-muted-foreground', col.w)}>
+                  <th key={col.key} className={cn('px-4 py-3 text-left font-semibold uppercase tracking-wide text-muted-foreground', col.w)}>
                     {col.label}
                   </th>
                 ))}

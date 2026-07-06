@@ -163,9 +163,9 @@ function SortableCategoryRow({
       </div>
 
       {/* Emoji ID */}
-      <div className="text-right">
+      <div className="min-w-0">
         {category.premium_emoji_id ? (
-          <span className="font-mono text-[11px] text-muted-foreground bg-surface-raised border border-border px-2 py-0.5 rounded-lg">
+          <span className="inline-flex max-w-full font-mono text-[11px] text-muted-foreground bg-surface-raised border border-border px-2 py-0.5 rounded-lg">
             {category.premium_emoji_id.length > 12 ? `${category.premium_emoji_id.slice(0, 12)}…` : category.premium_emoji_id}
           </span>
         ) : (
@@ -174,10 +174,10 @@ function SortableCategoryRow({
       </div>
 
       {/* Sort order */}
-      <span className="text-xs text-muted-foreground w-8 text-right">#{category.sort_order + 1}</span>
+      <span className="text-xs text-muted-foreground">#{category.sort_order + 1}</span>
 
       {/* Actions */}
-      <div className="flex w-[104px] justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <button onClick={onEdit} title="Edit" className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
           <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
@@ -295,9 +295,9 @@ export default function CategoriesTab() {
           <div className={cn('grid gap-4 px-5 py-3 border-b border-border', CATEGORY_TABLE_COLUMNS)}>
             <span className="w-6" />
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Category</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Emoji ID</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-right">Order</span>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center">Actions</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Emoji ID</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Order</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Actions</span>
           </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
