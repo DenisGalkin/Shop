@@ -113,15 +113,20 @@ def _clear_session_cookie(response: web.StreamResponse) -> None:
 def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": order["id"],
+        "product_id": order["product_id"],
+        "stock_item_id": order.get("stock_item_id"),
         "product_title": order["product_title"],
         "buyer_name": order["buyer_name"],
         "buyer_tg_id": order["buyer_tg_id"],
+        "username": order.get("buyer_username") or "",
         "amount_cents": order["amount_cents"],
         "amount_label": format_money(order["amount_cents"]),
         "status": order["status"],
         "payment_method": order["payment_method"],
+        "payment_status": order.get("payment_status") or "",
         "created_at": order["created_at"],
         "created_label": format_date(order["created_at"]),
+        "completed_at": order.get("completed_at"),
     }
 
 

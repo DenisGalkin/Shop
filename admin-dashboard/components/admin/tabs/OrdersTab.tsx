@@ -24,16 +24,29 @@ const methodCls: Record<string, string> = {
   balance: 'text-neon bg-neon/10',
 }
 
+const formatOrderDate = (value: string | null | undefined) => value || '—'
+
+function csvCell(value: string | number | null | undefined) {
+  const text = String(value ?? '')
+  return `"${text.replace(/"/g, '""')}"`
+}
+
 function exportCsv(data: Order[]) {
-  const headers = ['id', 'user_id', 'user_name', 'username', 'product_id', 'product_name', 'stock_item_id', 'amount_cents', 'amount_usd', 'status', 'payment_method', 'payment_status', 'created_at', 'completed_at']
+  const headers = ['id', 'user_id', 'user_name', 'username', 'product_name', 'amount_usd', 'status', 'payment_method', 'payment_status', 'created_at']
   const rows = data.map((o) => [
-    o.id, o.user_id, `"${o.user_name}"`, o.username ?? '', o.product_id, `"${o.product_name}"`,
-    o.stock_item_id ?? '', o.amount_cents, (o.amount_cents / 100).toFixed(2),
-    o.status, o.payment_method, o.payment_status,
-    o.created_at, o.completed_at ?? '',
+    o.id,
+    o.user_id,
+    csvCell(o.user_name),
+    csvCell(o.username ?? ''),
+    csvCell(o.product_name),
+    (o.amount_cents / 100).toFixed(2),
+    csvCell(o.status),
+    csvCell(o.payment_method),
+    csvCell(o.payment_status),
+    csvCell(o.created_at),
   ])
   const csv = [headers, ...rows].map((r) => r.join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
+  const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -172,7 +185,7 @@ export default function OrdersTab() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{order.product_name || 'Order'}</p>
                   <p className="text-xs text-muted-foreground">
-                    {order.username ? `@${order.username}` : order.user_name || `ID ${order.user_id}`} · {order.created_at ? new Date(order.created_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                    {order.username ? `@${order.username}` : order.user_name || `ID ${order.user_id}`} · {formatOrderDate(order.created_at)}
                   </p>
                 </div>
                 <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full hidden sm:inline-flex', mCls)}>
@@ -195,12 +208,10 @@ export default function OrdersTab() {
                       { label: 'User', value: order.user_name || '—' },
                       { label: 'Username', value: order.username ? `@${order.username}` : '—' },
                       { label: 'Product', value: order.product_name || '—' },
-                      { label: 'Stock item ID', value: order.stock_item_id ? String(order.stock_item_id) : '—' },
                       { label: 'Amount', value: fmt(order.amount_cents) },
                       { label: 'Payment method', value: order.payment_method || '—' },
                       { label: 'Payment status', value: order.payment_status || '—' },
-                      { label: 'Created', value: order.created_at ? new Date(order.created_at).toLocaleString('en') : '—' },
-                      { label: 'Completed', value: order.completed_at ? new Date(order.completed_at).toLocaleString('en') : '—' },
+                      { label: 'Created', value: formatOrderDate(order.created_at) },
                     ].map((d) => (
                       <div key={d.label}>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{d.label}</p>

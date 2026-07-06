@@ -2403,7 +2403,7 @@ class ShopRepository:
     async def get_recent_orders(self, limit: int = 20) -> list[dict[str, Any]]:
         rows = await self._fetchall(
             """
-            SELECT o.*, p.title AS product_title, u.tg_id AS buyer_tg_id, u.full_name AS buyer_name
+            SELECT o.*, p.title AS product_title, u.tg_id AS buyer_tg_id, u.full_name AS buyer_name, u.username AS buyer_username
             FROM orders o
             JOIN products p ON p.id = o.product_id
             JOIN users u ON u.id = o.user_id

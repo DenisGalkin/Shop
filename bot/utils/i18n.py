@@ -83,7 +83,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cancel_purchase": "Отменить покупку",
         "order_success_text": (
             "<b>{order_emoji} Заказ #{order_id} успешно оформлен</b>\n\n"
-            "{category_emoji} Товар: {product_title}\n"
+            "{category_emoji} {product_title}\n\n"
             "{price_emoji} Стоимость: {amount}\n"
             "{key_emoji} Ключ: <code>{key_value}</code>{activation_link_block}\n\n"
             "Ключ также сохранён в разделе «Мои покупки»."
@@ -264,7 +264,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cancel_purchase": "Cancel purchase",
         "order_success_text": (
             "<b>{order_emoji} Order #{order_id} completed successfully</b>\n\n"
-            "{category_emoji} Product: {product_title}\n"
+            "{category_emoji} {product_title}\n\n"
             "{price_emoji} Price: {amount}\n"
             "{key_emoji} Key: <code>{key_value}</code>{activation_link_block}\n\n"
             "The key is also saved in the “My purchases” section."
@@ -445,7 +445,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "cancel_purchase": "Скасувати покупку",
         "order_success_text": (
             "<b>{order_emoji} Замовлення #{order_id} успішно оформлено</b>\n\n"
-            "{category_emoji} Товар: {product_title}\n"
+            "{category_emoji} {product_title}\n\n"
             "{price_emoji} Вартість: {amount}\n"
             "{key_emoji} Ключ: <code>{key_value}</code>{activation_link_block}\n\n"
             "Ключ також збережено в розділі «Мої покупки»."
