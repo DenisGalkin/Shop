@@ -85,6 +85,11 @@ function getStockMeta(item: StockItem) {
   return item.created_label ? `Added ${item.created_label}` : 'Ready for sale'
 }
 
+function maskKeyValue(value: string) {
+  if (value.length <= 28) return value
+  return `${value.slice(0, 14)}...${value.slice(-10)}`
+}
+
 // ── empty product template ────────────────────────────────────────────────────
 const emptyProduct = (categories: Category[]): Omit<Product, 'id' | 'slug' | 'created_at' | 'sold'> => ({
   category_id: categories[0]?.id ?? '',
@@ -373,33 +378,49 @@ function KeysModal({
   }
 
   const pendingCount = keys.split('\n').filter((k) => k.trim()).length
+  const availableCount = items.filter((item) => item.status === 'available').length
+  const reservedCount = items.filter((item) => item.status === 'reserved').length
+  const soldCount = items.filter((item) => item.status === 'sold').length
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-4xl bg-card border border-border rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div>
+      <div className="w-full max-w-[1100px] bg-card border border-border rounded-[26px] shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[88vh]">
+        <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-border bg-linear-to-r from-white/[0.03] to-transparent">
+          <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground">Add keys</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">{product.title} · {product.stock} in stock</p>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{product.title}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="inline-flex items-center rounded-full border border-neon/20 bg-neon/10 px-2.5 py-1 text-[11px] font-medium text-neon">
+                {product.stock} in stock
+              </span>
+              <span className="inline-flex items-center rounded-full border border-border bg-surface-raised/70 px-2.5 py-1 text-[11px] text-foreground">
+                {items.length} total
+              </span>
+              <span className="inline-flex items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-300">
+                {reservedCount} reserved
+              </span>
+              <span className="inline-flex items-center rounded-full border border-zinc-400/20 bg-zinc-400/10 px-2.5 py-1 text-[11px] text-zinc-300">
+                {soldCount} sold
+              </span>
+            </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors shrink-0">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="px-6 py-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr] overflow-y-auto">
-          <div className="space-y-4 min-w-0">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised/50 px-4 py-3">
+        <div className="px-5 py-4 grid gap-4 lg:grid-cols-[1.3fr_0.8fr] overflow-y-auto">
+          <div className="min-w-0">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Added keys</div>
-                <div className="text-sm text-foreground mt-1">{items.length} total records</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Loaded keys</div>
+                <div className="text-xs text-muted-foreground mt-1">Compact view with fast delete for available keys.</div>
               </div>
-              <div className="text-right">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Available now</div>
-                <div className="text-lg font-semibold text-neon mt-1">{product.stock}</div>
-              </div>
+              <span className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+                {availableCount} available
+              </span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {loading ? (
                 <div className="rounded-2xl border border-border bg-surface-raised/40 px-4 py-8 text-sm text-muted-foreground">
                   Loading keys...
@@ -417,25 +438,29 @@ function KeysModal({
                   const status = stockStatusMeta[item.status] || { label: item.status, badge: 'bg-zinc-400/10 text-zinc-300 border-zinc-400/20' }
                   const deleting = deletingId === item.id
                   return (
-                    <div key={item.id} className="rounded-2xl border border-border bg-surface-raised/30 px-4 py-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium', status.badge)}>
-                            {status.label}
+                    <div key={item.id} className="group rounded-2xl border border-border bg-surface-raised/25 px-3 py-2.5 transition-colors hover:bg-surface-raised/45">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium shrink-0', status.badge)}>
+                              {status.label}
+                            </div>
+                            <div className="truncate font-mono text-[13px] text-foreground" title={item.key_value}>
+                              {maskKeyValue(item.key_value)}
+                            </div>
                           </div>
-                          <div className="mt-2 break-all font-mono text-sm text-foreground">{item.key_value}</div>
-                          <div className="mt-2 text-xs text-muted-foreground">{getStockMeta(item)}</div>
+                          <div className="mt-1 truncate text-[11px] text-muted-foreground">{getStockMeta(item)}</div>
                         </div>
                         {item.can_delete ? (
                           <button
                             onClick={() => handleDelete(item)}
                             disabled={deleting}
-                            className="shrink-0 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs font-medium text-red-300 transition-colors hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="shrink-0 rounded-lg border border-red-400/20 bg-red-400/8 px-2.5 py-1.5 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {deleting ? 'Deleting...' : 'Delete'}
                           </button>
                         ) : (
-                          <span className="shrink-0 text-[11px] text-muted-foreground">Delete unavailable</span>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">Locked</span>
                         )}
                       </div>
                     </div>
@@ -445,34 +470,45 @@ function KeysModal({
             </div>
           </div>
 
-          <div className="space-y-4 min-w-0">
-            <div>
+          <div className="min-w-0">
+            <div className="rounded-[22px] border border-border bg-linear-to-b from-surface-raised/55 to-surface-raised/25 p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide block">
+                    Add new batch
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">One key per line. Duplicates are skipped automatically.</p>
+                </div>
+                <span className="inline-flex items-center rounded-full border border-border bg-card/70 px-2.5 py-1 text-[11px] text-foreground shrink-0">
+                  {pendingCount} ready
+                </span>
+              </div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
                 Keys (one per line)
               </label>
               <textarea
-                rows={12}
+                rows={10}
                 value={keys}
                 onChange={(e) => setKeys(e.target.value)}
                 placeholder={'KEY-XXXX-XXXX-XXXX\nKEY-YYYY-YYYY-YYYY\n...'}
-                className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 resize-none"
+                className="w-full bg-card/80 border border-border rounded-2xl px-3 py-2.5 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 resize-none"
               />
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-3">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              Keys are unique. Duplicates will be skipped, and only available keys can be deleted.
-            </div>
-            {!!error && items.length > 0 && (
-              <div className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
-                {error}
+              <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground rounded-xl border border-amber-400/20 bg-amber-400/5 px-3 py-2.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <span>Only available keys can be deleted. Reserved and sold keys stay protected.</span>
               </div>
-            )}
+              {!!error && items.length > 0 && (
+                <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+                  {error}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {pendingCount} keys to add
+        <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3 bg-black/10">
+          <span className="text-xs text-muted-foreground truncate">
+            {pendingCount > 0 ? `${pendingCount} keys ready to upload` : 'Paste keys to prepare a new batch'}
           </span>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
