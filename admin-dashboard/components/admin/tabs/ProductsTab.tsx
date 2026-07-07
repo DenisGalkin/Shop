@@ -7,15 +7,18 @@ import {
 } from 'lucide-react'
 import {
   createProduct,
+  deleteProductStockItem,
   deleteProduct,
   getCategories,
   getProducts,
+  getProductStockItems,
   reorderProducts,
   toggleProduct,
   updateProduct,
   uploadProductKeys,
   type Category,
   type Product,
+  type StockItem,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import {
@@ -64,6 +67,22 @@ function normalizeModalI18n(value?: { en?: string; ru?: string; ua?: string; uk?
     ru: value?.ru ?? '',
     ua: ukrainian,
   }
+}
+
+const stockStatusMeta: Record<string, { label: string; badge: string }> = {
+  available: { label: 'Available', badge: 'bg-emerald-400/10 text-emerald-400 border-emerald-400/20' },
+  reserved: { label: 'Reserved', badge: 'bg-amber-400/10 text-amber-400 border-amber-400/20' },
+  sold: { label: 'Sold', badge: 'bg-zinc-400/10 text-zinc-300 border-zinc-400/20' },
+}
+
+function getStockMeta(item: StockItem) {
+  if (item.status === 'reserved') {
+    return item.reserved_until_label ? `Reserved until ${item.reserved_until_label}` : 'Waiting for payment'
+  }
+  if (item.status === 'sold') {
+    return item.sold_label ? `Sold ${item.sold_label}` : 'Already issued to customer'
+  }
+  return item.created_label ? `Added ${item.created_label}` : 'Ready for sale'
 }
 
 // ── empty product template ────────────────────────────────────────────────────
@@ -282,12 +301,82 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
 }
 
 // ── Keys modal ────────────────────────────────────────────────────────────────
-function KeysModal({ product, onClose, onUpload }: { product: Product; onClose: () => void; onUpload: (keys: string[]) => void }) {
+function KeysModal({
+  product,
+  onClose,
+  onUpload,
+  onProductUpdated,
+}: {
+  product: Product
+  onClose: () => void
+  onUpload: (keys: string[]) => Promise<void>
+  onProductUpdated: (product: Product) => void
+}) {
   const [keys, setKeys] = useState('')
+  const [items, setItems] = useState<StockItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [error, setError] = useState('')
+
+  const loadItems = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await getProductStockItems(product.id)
+      setItems(response.items)
+      onProductUpdated(response.product)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load keys')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadItems().catch(() => {})
+  }, [product.id])
+
+  const handleUpload = async () => {
+    const prepared = keys.split('\n').map((key) => key.trim()).filter(Boolean)
+    if (!prepared.length) {
+      setError('Add at least one key')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await onUpload(prepared)
+      setKeys('')
+      await loadItems()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload keys')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async (item: StockItem) => {
+    const confirmed = window.confirm('Delete this key? This action cannot be undone.')
+    if (!confirmed) return
+    setDeletingId(item.id)
+    setError('')
+    try {
+      const updatedProduct = await deleteProductStockItem(product.id, item.id)
+      onProductUpdated(updatedProduct)
+      setItems((prev) => prev.filter((entry) => entry.id !== item.id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete key')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const pendingCount = keys.split('\n').filter((k) => k.trim()).length
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
+      <div className="w-full max-w-4xl bg-card border border-border rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h2 className="text-base font-semibold text-foreground">Add keys</h2>
@@ -298,41 +387,103 @@ function KeysModal({ product, onClose, onUpload }: { product: Product; onClose: 
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
-          <div>
-            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-              Keys (one per line)
-            </label>
-            <textarea
-              rows={8}
-              value={keys}
-              onChange={(e) => setKeys(e.target.value)}
-              placeholder={'KEY-XXXX-XXXX-XXXX\nKEY-YYYY-YYYY-YYYY\n...'}
-              className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 resize-none"
-            />
+        <div className="px-6 py-5 grid gap-5 lg:grid-cols-[1.05fr_0.95fr] overflow-y-auto">
+          <div className="space-y-4 min-w-0">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface-raised/50 px-4 py-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Added keys</div>
+                <div className="text-sm text-foreground mt-1">{items.length} total records</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Available now</div>
+                <div className="text-lg font-semibold text-neon mt-1">{product.stock}</div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {loading ? (
+                <div className="rounded-2xl border border-border bg-surface-raised/40 px-4 py-8 text-sm text-muted-foreground">
+                  Loading keys...
+                </div>
+              ) : error && !items.length ? (
+                <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-4 text-sm text-red-300">
+                  {error}
+                </div>
+              ) : !items.length ? (
+                <div className="rounded-2xl border border-dashed border-border bg-surface-raised/20 px-4 py-8 text-sm text-muted-foreground">
+                  No keys yet. You can upload a new batch on the right.
+                </div>
+              ) : (
+                items.map((item) => {
+                  const status = stockStatusMeta[item.status] || { label: item.status, badge: 'bg-zinc-400/10 text-zinc-300 border-zinc-400/20' }
+                  const deleting = deletingId === item.id
+                  return (
+                    <div key={item.id} className="rounded-2xl border border-border bg-surface-raised/30 px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium', status.badge)}>
+                            {status.label}
+                          </div>
+                          <div className="mt-2 break-all font-mono text-sm text-foreground">{item.key_value}</div>
+                          <div className="mt-2 text-xs text-muted-foreground">{getStockMeta(item)}</div>
+                        </div>
+                        {item.can_delete ? (
+                          <button
+                            onClick={() => handleDelete(item)}
+                            disabled={deleting}
+                            className="shrink-0 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs font-medium text-red-300 transition-colors hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deleting ? 'Deleting...' : 'Delete'}
+                          </button>
+                        ) : (
+                          <span className="shrink-0 text-[11px] text-muted-foreground">Delete unavailable</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-3">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            Keys are unique — duplicates will be skipped on upload.
+
+          <div className="space-y-4 min-w-0">
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
+                Keys (one per line)
+              </label>
+              <textarea
+                rows={12}
+                value={keys}
+                onChange={(e) => setKeys(e.target.value)}
+                placeholder={'KEY-XXXX-XXXX-XXXX\nKEY-YYYY-YYYY-YYYY\n...'}
+                className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 resize-none"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-amber-400/5 border border-amber-400/20 rounded-xl px-4 py-3">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              Keys are unique. Duplicates will be skipped, and only available keys can be deleted.
+            </div>
+            {!!error && items.length > 0 && (
+              <div className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="px-6 py-4 border-t border-border flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
-            {keys.split('\n').filter((k) => k.trim()).length} keys to add
+            {pendingCount} keys to add
           </span>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
               Cancel
             </button>
             <button
-              onClick={() => {
-                onUpload(keys.split('\n').map((key) => key.trim()).filter(Boolean))
-                onClose()
-              }}
-              className="px-5 py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors"
+              onClick={handleUpload}
+              disabled={busy}
+              className="px-5 py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Upload keys
+              {busy ? 'Uploading...' : 'Upload keys'}
             </button>
           </div>
         </div>
@@ -517,12 +668,13 @@ export default function ProductsTab() {
   }
 
   const handleUploadKeys = async (product: Product, keys: string[]) => {
-    try {
-      await uploadProductKeys(product.id, keys)
-      await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload keys')
-    }
+    await uploadProductKeys(product.id, keys)
+    await refresh()
+  }
+
+  const syncProduct = (updated: Product) => {
+    setItems((prev) => prev.map((item) => item.id === updated.id ? updated : item))
+    setKeysProduct((prev) => prev && prev.id === updated.id ? updated : prev)
   }
 
   const handleDelete = async (product: Product) => {
@@ -651,7 +803,12 @@ export default function ProductsTab() {
         />
       )}
       {keysProduct && (
-        <KeysModal product={keysProduct} onClose={() => setKeysProduct(null)} onUpload={(keys) => handleUploadKeys(keysProduct, keys)} />
+        <KeysModal
+          product={keysProduct}
+          onClose={() => setKeysProduct(null)}
+          onUpload={(keys) => handleUploadKeys(keysProduct, keys)}
+          onProductUpdated={syncProduct}
+        />
       )}
     </div>
   )

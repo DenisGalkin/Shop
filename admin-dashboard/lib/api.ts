@@ -36,6 +36,22 @@ export type Product = {
   image: string
 }
 
+export type StockItem = {
+  id: number
+  product_id: string
+  key_value: string
+  status: 'available' | 'reserved' | 'sold' | string
+  order_id: number | null
+  reserved_payment_id: number | null
+  reserved_until: string | null
+  reserved_until_label: string | null
+  created_at: string
+  created_label: string | null
+  sold_at: string | null
+  sold_label: string | null
+  can_delete: boolean
+}
+
 export type User = {
   id: number
   tg_id: number
@@ -212,6 +228,24 @@ function mapProduct(raw: any): Product {
     stock: Number(raw.stock_count || 0),
     sold: Number(raw.sold_count || 0),
     image: '📦',
+  }
+}
+
+function mapStockItem(raw: any): StockItem {
+  return {
+    id: Number(raw.id || 0),
+    product_id: String(raw.product_id || ''),
+    key_value: raw.key_value || '',
+    status: raw.status || 'available',
+    order_id: raw.order_id ?? null,
+    reserved_payment_id: raw.reserved_payment_id ?? null,
+    reserved_until: raw.reserved_until || null,
+    reserved_until_label: raw.reserved_until_label || null,
+    created_at: raw.created_at || '',
+    created_label: raw.created_label || null,
+    sold_at: raw.sold_at || null,
+    sold_label: raw.sold_label || null,
+    can_delete: Boolean(raw.can_delete),
   }
 }
 
@@ -399,6 +433,19 @@ export async function uploadProductKeys(id: string, keys: string[]): Promise<{ a
     keys: keys.join('\n'),
   })
   return { added: res.added, skipped: res.skipped }
+}
+
+export async function getProductStockItems(id: string): Promise<{ product: Product; items: StockItem[] }> {
+  const res = await apiFetch<{ ok: true; product: any; items: any[] }>('GET', `/products/${idNum(id)}/stock-items`)
+  return {
+    product: mapProduct(res.product),
+    items: res.items.map(mapStockItem),
+  }
+}
+
+export async function deleteProductStockItem(productId: string, stockItemId: number): Promise<Product> {
+  const res = await apiFetch<{ ok: true; item: any }>('DELETE', `/products/${idNum(productId)}/stock-items/${stockItemId}`)
+  return mapProduct(res.item)
 }
 
 export async function getUsers(params?: { search?: string }): Promise<{ users: User[]; total: number }> {
