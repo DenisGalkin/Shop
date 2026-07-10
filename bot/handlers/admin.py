@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+
 from aiogram import Bot, F, Router, html
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -40,6 +43,7 @@ class AdminStates(StatesGroup):
     add_stock = State()
     find_user = State()
     add_user_balance = State()
+    broadcast_message = State()
     edit_setting = State()
 
 
@@ -111,16 +115,18 @@ def _parse_category_emoji_input(message: Message) -> str | None:
 
 
 @router.message(Command("admin"))
-async def admin_entry(message: Message, repo: ShopRepository, config: Config) -> None:
+async def admin_entry(message: Message, state: FSMContext, repo: ShopRepository, config: Config) -> None:
     if not await _ensure_admin_access(message, config):
         return
+    await state.clear()
     await _render_admin_home(message, repo)
 
 
 @router.callback_query(F.data == "admin:home")
-async def admin_home(callback: CallbackQuery, repo: ShopRepository, config: Config) -> None:
+async def admin_home(callback: CallbackQuery, state: FSMContext, repo: ShopRepository, config: Config) -> None:
     if not await _ensure_admin_access(callback, config):
         return
+    await state.clear()
     await _render_admin_home(callback, repo)
 
 
@@ -519,6 +525,64 @@ async def admin_users(callback: CallbackQuery, config: Config) -> None:
     if not await _ensure_admin_access(callback, config):
         return
     await render_message(callback, "<b>👤 Работа с пользователями</b>", reply_markup=admin_user_lookup_kb())
+
+
+@router.callback_query(F.data == "admin:broadcast:start")
+async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext, repo: ShopRepository, config: Config) -> None:
+    if not await _ensure_admin_access(callback, config):
+        return
+    recipients_total = len(await repo.list_all_user_tg_ids())
+    await state.set_state(AdminStates.broadcast_message)
+    await render_message(
+        callback,
+        (
+            "<b>📣 Рассылка всем пользователям</b>\n\n"
+            f"Сейчас в базе <b>{recipients_total}</b> получателей.\n"
+            "Отправьте следующим сообщением текст, фото, видео, документ или другое сообщение для рассылки.\n"
+            "Я скопирую его пользователям без потери форматирования и premium emoji.\n\n"
+            "Чтобы выйти без отправки, нажмите /admin."
+        ),
+    )
+
+
+@router.message(AdminStates.broadcast_message)
+async def admin_broadcast_finish(
+    message: Message, state: FSMContext, repo: ShopRepository, config: Config, bot: Bot
+) -> None:
+    if not await _ensure_admin_access(message, config):
+        return
+    recipient_ids = await repo.list_all_user_tg_ids()
+    if not recipient_ids:
+        await state.clear()
+        await message.answer("В базе пока нет пользователей для рассылки.")
+        await _render_admin_home(message, repo)
+        return
+
+    await state.clear()
+    delivered = 0
+    failed = 0
+    for recipient_id in recipient_ids:
+        try:
+            await bot.copy_message(
+                chat_id=recipient_id,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+            )
+            delivered += 1
+        except (TelegramForbiddenError, TelegramBadRequest):
+            failed += 1
+        except Exception:
+            failed += 1
+        await asyncio.sleep(0.05)
+
+    await message.answer(
+        (
+            "<b>Рассылка завершена.</b>\n\n"
+            f"Доставлено: <b>{delivered}</b>\n"
+            f"Не доставлено: <b>{failed}</b>"
+        )
+    )
+    await _render_admin_home(message, repo)
 
 
 @router.callback_query(F.data == "admin:user:find")

@@ -335,6 +335,7 @@ def admin_home_kb() -> InlineKeyboardMarkup:
     builder.button(text="🛍 Ассортимент", callback_data="admin:catalog")
     builder.button(text="🔑 Склад", callback_data="admin:stock")
     builder.button(text="👤 Пользователи", callback_data="admin:users")
+    builder.button(text="📣 Рассылка", callback_data="admin:broadcast:start")
     builder.button(text="🧾 Заказы", callback_data="admin:orders")
     builder.button(text="⚙️ Настройки", callback_data="admin:settings")
     builder.adjust(2)
@@ -401,6 +402,7 @@ def admin_product_detail_kb(product_id: int, from_mode: str = "catalog") -> Inli
 def admin_user_lookup_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="🔎 Найти пользователя", callback_data="admin:user:find")
+    builder.button(text="📣 Рассылка всем", callback_data="admin:broadcast:start")
     builder.button(text="⬅️ В админку", callback_data="admin:home")
     builder.adjust(1)
     return builder.as_markup()

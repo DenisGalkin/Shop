@@ -951,6 +951,10 @@ class ShopRepository:
         row = await self._fetchone("SELECT * FROM users WHERE tg_id = ?", (tg_id,))
         return dict(row) if row else None
 
+    async def list_all_user_tg_ids(self) -> list[int]:
+        rows = await self._fetchall("SELECT tg_id FROM users ORDER BY id ASC")
+        return [int(row["tg_id"]) for row in rows]
+
     async def get_user_stats(self, user_id: int) -> dict[str, Any]:
         user = await self._fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
         referrals = await self._fetchone("SELECT COUNT(*) AS count FROM users WHERE referrer_user_id = ?", (user_id,))
