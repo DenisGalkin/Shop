@@ -193,8 +193,8 @@ class ShopRepository:
                 product_id INTEGER,
                 reserved_stock_item_id INTEGER,
                 order_id INTEGER,
-                provider_payment_id TEXT UNIQUE,
-                provider_invoice_id INTEGER UNIQUE,
+                provider_payment_id TEXT,
+                provider_invoice_id TEXT,
                 provider_invoice_url TEXT,
                 provider_status TEXT NOT NULL DEFAULT 'creating',
                 merchant_id INTEGER,
@@ -246,12 +246,19 @@ class ShopRepository:
             CREATE INDEX IF NOT EXISTS idx_stock_product_status ON stock_items(product_id, status);
             CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_stock_notifications_product ON stock_notifications(product_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_provider_payment_id ON payments(provider_payment_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_type_provider_invoice_id
+                ON payments(payment_type, provider_invoice_id)
+                WHERE provider_invoice_id IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_payments_user_created ON payments(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_payments_pending_sync ON payments(payment_type, status, expires_at, last_checked_at);
             """
         )
         await self.db.commit()
 
     async def _migrate_schema(self) -> None:
         await self._drop_legacy_catalog_columns()
+        await self._rebuild_payments_table_if_needed()
         await self._ensure_column("products", "title_i18n", "TEXT NOT NULL DEFAULT '{}'")
         await self._ensure_column("products", "description_i18n", "TEXT NOT NULL DEFAULT '{}'")
         await self._ensure_column("products", "important_info_i18n", "TEXT NOT NULL DEFAULT '{}'")
@@ -265,7 +272,7 @@ class ShopRepository:
         await self._ensure_column("payments", "reserved_stock_item_id", "INTEGER")
         await self._ensure_column("payments", "order_id", "INTEGER")
         await self._ensure_column("payments", "provider_payment_id", "TEXT")
-        await self._ensure_column("payments", "provider_invoice_id", "INTEGER")
+        await self._ensure_column("payments", "provider_invoice_id", "TEXT")
         await self._ensure_column("payments", "provider_invoice_url", "TEXT")
         await self._ensure_column("payments", "provider_status", "TEXT NOT NULL DEFAULT 'creating'")
         await self._ensure_column("payments", "merchant_id", "INTEGER")
@@ -283,7 +290,14 @@ class ShopRepository:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_provider_payment_id ON payments(provider_payment_id)"
         )
         await self.db.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_provider_invoice_id ON payments(provider_invoice_id)"
+            "DROP INDEX IF EXISTS idx_payments_provider_invoice_id"
+        )
+        await self.db.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_type_provider_invoice_id
+            ON payments(payment_type, provider_invoice_id)
+            WHERE provider_invoice_id IS NOT NULL
+            """
         )
         await self.db.execute(
             "CREATE INDEX IF NOT EXISTS idx_stock_reserved_until ON stock_items(status, reserved_until)"
@@ -574,6 +588,119 @@ class ShopRepository:
         if any(row["name"] == column_name for row in columns):
             return
         await self.db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
+
+    async def _rebuild_payments_table_if_needed(self) -> None:
+        payments_table = await self._fetchone(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'payments'"
+        )
+        if payments_table is None:
+            return
+        if not await self._payments_table_requires_rebuild():
+            return
+        now_iso = utcnow_iso()
+        await self.db.execute("PRAGMA foreign_keys=OFF")
+        await self.db.execute("DROP INDEX IF EXISTS idx_payments_provider_payment_id")
+        await self.db.execute("DROP INDEX IF EXISTS idx_payments_provider_invoice_id")
+        await self.db.execute("DROP INDEX IF EXISTS idx_payments_type_provider_invoice_id")
+        await self.db.execute("DROP INDEX IF EXISTS idx_payments_user_created")
+        await self.db.execute("DROP INDEX IF EXISTS idx_payments_pending_sync")
+        await self.db.execute("ALTER TABLE payments RENAME TO payments_legacy")
+        await self.db.execute(
+            """
+            CREATE TABLE payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                amount_cents INTEGER NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'USD',
+                payment_type TEXT NOT NULL,
+                purpose TEXT NOT NULL DEFAULT 'deposit',
+                product_id INTEGER,
+                reserved_stock_item_id INTEGER,
+                order_id INTEGER,
+                provider_payment_id TEXT,
+                provider_invoice_id TEXT,
+                provider_invoice_url TEXT,
+                provider_status TEXT NOT NULL DEFAULT 'creating',
+                merchant_id INTEGER,
+                external_amount TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_text TEXT,
+                meta_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                expires_at TEXT,
+                processed_at TEXT,
+                last_checked_at TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (product_id) REFERENCES products(id),
+                FOREIGN KEY (reserved_stock_item_id) REFERENCES stock_items(id),
+                FOREIGN KEY (order_id) REFERENCES orders(id)
+            )
+            """
+        )
+        await self.db.execute(
+            """
+            INSERT INTO payments (
+                id, user_id, amount_cents, currency, payment_type, purpose, product_id,
+                reserved_stock_item_id, order_id, provider_payment_id, provider_invoice_id,
+                provider_invoice_url, provider_status, merchant_id, external_amount, status,
+                error_text, meta_json, created_at, updated_at, expires_at, processed_at, last_checked_at
+            )
+            SELECT
+                id,
+                user_id,
+                amount_cents,
+                COALESCE(currency, 'USD'),
+                payment_type,
+                COALESCE(purpose, 'deposit'),
+                product_id,
+                reserved_stock_item_id,
+                order_id,
+                provider_payment_id,
+                NULLIF(TRIM(CAST(provider_invoice_id AS TEXT)), ''),
+                provider_invoice_url,
+                COALESCE(provider_status, 'creating'),
+                merchant_id,
+                external_amount,
+                COALESCE(status, 'pending'),
+                error_text,
+                COALESCE(meta_json, '{}'),
+                created_at,
+                COALESCE(updated_at, created_at, ?),
+                expires_at,
+                processed_at,
+                last_checked_at
+            FROM payments_legacy
+            """,
+            (now_iso,),
+        )
+        await self.db.execute("DROP TABLE payments_legacy")
+        await self.db.execute("PRAGMA foreign_keys=ON")
+
+    async def _payments_table_requires_rebuild(self) -> bool:
+        columns = await self._fetchall("PRAGMA table_info(payments)")
+        if not columns:
+            return False
+        column_types = {str(row["name"]): str(row["type"] or "").upper() for row in columns}
+        if column_types.get("provider_invoice_id") != "TEXT":
+            return True
+        foreign_keys = await self._fetchall("PRAGMA foreign_key_list(payments)")
+        expected_foreign_keys = {
+            ("users", "user_id", "id"),
+            ("products", "product_id", "id"),
+            ("stock_items", "reserved_stock_item_id", "id"),
+            ("orders", "order_id", "id"),
+        }
+        current_foreign_keys = {
+            (str(row["table"]), str(row["from"]), str(row["to"]))
+            for row in foreign_keys
+        }
+        if not expected_foreign_keys.issubset(current_foreign_keys):
+            return True
+        indexes = await self._fetchall("PRAGMA index_list(payments)")
+        if any(str(row["name"]) == "idx_payments_provider_invoice_id" for row in indexes):
+            return True
+        return False
 
     async def _seed_settings(self, config: Config) -> None:
         settings = {
@@ -1720,8 +1847,8 @@ class ShopRepository:
         await self.db.execute("BEGIN IMMEDIATE")
         try:
             payment_row = await self._fetchone(
-                "SELECT * FROM payments WHERE provider_invoice_id = ?",
-                (provider_invoice_id,),
+                "SELECT * FROM payments WHERE payment_type = 'cryptobot' AND provider_invoice_id = ?",
+                (str(provider_invoice_id),),
             )
             if payment_row is None:
                 raise ValueError("Payment not found for invoice")
@@ -1815,14 +1942,14 @@ class ShopRepository:
         try:
             if provider_invoice_id:
                 payment_row = await self._fetchone(
-                    "SELECT * FROM payments WHERE provider_invoice_id = ?",
+                    "SELECT * FROM payments WHERE payment_type = 'heleket' AND provider_invoice_id = ?",
                     (provider_invoice_id,),
                 )
             else:
                 payment_row = None
             if payment_row is None and provider_payment_id:
                 payment_row = await self._fetchone(
-                    "SELECT * FROM payments WHERE provider_payment_id = ?",
+                    "SELECT * FROM payments WHERE payment_type = 'heleket' AND provider_payment_id = ?",
                     (provider_payment_id,),
                 )
             if payment_row is None:
@@ -1912,12 +2039,12 @@ class ShopRepository:
         try:
             if provider_invoice_id:
                 payment_row = await self._fetchone(
-                    "SELECT * FROM payments WHERE provider_invoice_id = ?",
+                    "SELECT * FROM payments WHERE payment_type = 'lolzteam' AND provider_invoice_id = ?",
                     (provider_invoice_id,),
                 )
             else:
                 payment_row = await self._fetchone(
-                    "SELECT * FROM payments WHERE provider_payment_id = ?",
+                    "SELECT * FROM payments WHERE payment_type = 'lolzteam' AND provider_payment_id = ?",
                     (provider_payment_id,),
                 )
             if payment_row is None:
@@ -2006,7 +2133,7 @@ class ShopRepository:
         await self.db.execute("BEGIN IMMEDIATE")
         try:
             payment_row = await self._fetchone(
-                "SELECT * FROM payments WHERE provider_invoice_id = ? OR provider_payment_id = ?",
+                "SELECT * FROM payments WHERE payment_type = 'platega' AND (provider_invoice_id = ? OR provider_payment_id = ?)",
                 (provider_invoice_id, provider_invoice_id),
             )
             if payment_row is None:
