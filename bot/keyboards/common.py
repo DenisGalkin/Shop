@@ -283,7 +283,14 @@ def deposit_methods_kb(
     return builder.as_markup()
 
 
-def payment_invoice_kb(payment_id: int, payment_url: str, lang: str, *, back_callback: str) -> InlineKeyboardMarkup:
+def payment_invoice_kb(
+    payment_id: int,
+    payment_url: str,
+    lang: str,
+    *,
+    back_callback: str,
+    cancel_callback: str | None = None,
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
         text=tr(lang, "pay_invoice"),
@@ -295,11 +302,18 @@ def payment_invoice_kb(payment_id: int, payment_url: str, lang: str, *, back_cal
         callback_data=f"payment:check:{payment_id}",
         icon_custom_emoji_id=premium_button_icon("refresh"),
     )
-    builder.button(
-        text=tr(lang, "back"),
-        callback_data=back_callback,
-        icon_custom_emoji_id=premium_button_icon("back"),
-    )
+    if cancel_callback:
+        builder.button(
+            text=tr(lang, "cancel_purchase"),
+            callback_data=cancel_callback,
+            icon_custom_emoji_id="5210952531676504517",
+        )
+    else:
+        builder.button(
+            text=tr(lang, "back"),
+            callback_data=back_callback,
+            icon_custom_emoji_id=premium_button_icon("back"),
+        )
     builder.adjust(1)
     return builder.as_markup()
 

@@ -809,10 +809,18 @@ class PaymentService:
         payment = await self.repo.get_user_payment_by_id(tg_user_id, payment_id)
         if not payment:
             raise ValueError(tr("ru", "payment_not_found"))
+        if payment.get("status") != "pending":
+            return payment
         provider = self._providers.get(payment.get("payment_type", ""))
         if not provider:
             raise ValueError("Unsupported payment provider")
         return await provider.sync_payment(payment)
+
+    async def cancel_product_payment_for_user(self, tg_user_id: int, payment_id: int) -> dict[str, Any]:
+        payment = await self.repo.cancel_product_payment_for_user(tg_user_id, payment_id)
+        if not payment:
+            raise ValueError(tr("ru", "payment_not_found"))
+        return payment
 
     async def start_background_sync(self) -> None:
         await self.heleket.start_background_sync()

@@ -128,6 +128,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "pay_invoice": "Оплатить счет",
         "check_payment": "Проверить оплату",
+        "purchase_cancelled": "Покупка отменена",
+        "purchase_cancelled_text": (
+            "<b>{important_emoji} Покупка отменена</b>\n\n"
+            "{amount_emoji} Сумма: {amount}\n\n"
+            "Платёж отменён, а резерв товара снят. При необходимости вы можете оформить покупку заново."
+        ),
+        "payment_cannot_be_cancelled": "Этот платёж уже нельзя отменить",
         "payment_confirmed": "Платёж подтверждён",
         "payment_confirmed_processing": "Платёж подтверждён, но выдача ещё обрабатывается",
         "invoice_expired": "Счёт истёк",
@@ -309,6 +316,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "pay_invoice": "Pay invoice",
         "check_payment": "Check payment",
+        "purchase_cancelled": "Purchase cancelled",
+        "purchase_cancelled_text": (
+            "<b>{important_emoji} Purchase cancelled</b>\n\n"
+            "{amount_emoji} Amount: {amount}\n\n"
+            "The payment has been cancelled and the product reservation has been released. You can create a new purchase if needed."
+        ),
+        "payment_cannot_be_cancelled": "This payment can no longer be cancelled",
         "payment_confirmed": "Payment confirmed",
         "payment_confirmed_processing": "Payment confirmed, but delivery is still being processed",
         "invoice_expired": "Invoice expired",
@@ -490,6 +504,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
         "pay_invoice": "Сплатити рахунок",
         "check_payment": "Перевірити оплату",
+        "purchase_cancelled": "Покупку скасовано",
+        "purchase_cancelled_text": (
+            "<b>{important_emoji} Покупку скасовано</b>\n\n"
+            "{amount_emoji} Сума: {amount}\n\n"
+            "Платіж скасовано, а резерв товару знято. За потреби ви можете оформити покупку повторно."
+        ),
+        "payment_cannot_be_cancelled": "Цей платіж уже не можна скасувати",
         "payment_confirmed": "Платіж підтверджено",
         "payment_confirmed_processing": "Платіж підтверджено, але видача ще обробляється",
         "invoice_expired": "Строк дії рахунку минув",
@@ -569,6 +590,7 @@ ERROR_TRANSLATION_KEYS = {
     "Товар уже в наличии": "product_already_in_stock",
     "Payment not found": "payment_not_found",
     "Платёж не найден": "payment_not_found",
+    "This payment cannot be cancelled": "payment_cannot_be_cancelled",
     "User not found": "user_not_found",
     "Пользователь не найден": "user_not_found",
     "Product is unavailable": "product_unavailable",

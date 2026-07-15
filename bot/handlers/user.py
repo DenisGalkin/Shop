@@ -405,6 +405,7 @@ async def buy_invoice_handler(
             payment["provider_invoice_url"],
             lang,
             back_callback=f"catalog:product:{product_id}",
+            cancel_callback=f"payment:cancel:{payment['id']}",
         ),
     )
 
@@ -567,6 +568,31 @@ async def deposit_method_handler(
     )
 
 
+@router.callback_query(F.data.startswith("payment:cancel:"))
+async def payment_cancel_handler(
+    callback: CallbackQuery,
+    repo: ShopRepository,
+    payment_service: PaymentService,
+) -> None:
+    user = await repo.get_user_by_tg_id(callback.from_user.id)
+    lang = _user_language(user)
+    payment_id = int(callback.data.split(":")[2])
+    try:
+        payment = await payment_service.cancel_product_payment_for_user(callback.from_user.id, payment_id)
+    except ValueError as exc:
+        await callback.answer(translate_error(lang, str(exc)), show_alert=True)
+        return
+    await callback.answer(tr(lang, "purchase_cancelled"))
+    text = tr(
+        lang,
+        "purchase_cancelled_text",
+        important_emoji=premium_emoji("important"),
+        amount_emoji=premium_emoji("amount"),
+        amount=format_money(payment["amount_cents"]),
+    )
+    await render_message(callback, text, reply_markup=back_kb(f"catalog:product:{payment['product_id']}", lang))
+
+
 @router.callback_query(F.data.startswith("payment:check:"))
 async def payment_check_handler(
     callback: CallbackQuery,
@@ -617,6 +643,18 @@ async def payment_check_handler(
         back_callback = "cabinet:main" if payment["purpose"] == "deposit" else f"catalog:product:{payment['product_id']}"
         await render_message(callback, text, reply_markup=back_kb(back_callback, lang))
         return
+    if payment["status"] == "cancelled":
+        await callback.answer(tr(lang, "purchase_cancelled"), show_alert=True)
+        text = tr(
+            lang,
+            "purchase_cancelled_text",
+            important_emoji=premium_emoji("important"),
+            amount_emoji=premium_emoji("amount"),
+            amount=format_money(payment["amount_cents"]),
+        )
+        back_callback = "cabinet:main" if payment["purpose"] == "deposit" else f"catalog:product:{payment['product_id']}"
+        await render_message(callback, text, reply_markup=back_kb(back_callback, lang))
+        return
     text = tr(
         lang,
         "payment_pending_text",
@@ -627,7 +665,13 @@ async def payment_check_handler(
     await render_message(
         callback,
         text,
-        reply_markup=payment_invoice_kb(payment["id"], payment["provider_invoice_url"], lang, back_callback=back_callback),
+        reply_markup=payment_invoice_kb(
+            payment["id"],
+            payment["provider_invoice_url"],
+            lang,
+            back_callback=back_callback,
+            cancel_callback=f"payment:cancel:{payment['id']}" if payment["purpose"] == "product_purchase" else None,
+        ),
     )
 
 

@@ -434,7 +434,7 @@ class ShopRepository:
         product_columns = {row["name"] for row in await self._fetchall("PRAGMA table_info(products)")}
         if "internal_name" in product_columns or "internal_name_i18n" in product_columns:
             await self._rebuild_products_without_internal_name()
-        await self._rebuild_stock_items_if_legacy_product_fk()
+        await self._rebuild_orders_and_stock_items_if_legacy_foreign_keys()
         await self._rebuild_stock_notifications_if_legacy_product_fk()
 
     async def _rebuild_categories_without_description(self) -> None:
@@ -541,16 +541,39 @@ class ShopRepository:
         )
         await self.db.execute("PRAGMA foreign_keys=ON")
 
-    async def _rebuild_stock_items_if_legacy_product_fk(self) -> None:
-        foreign_keys = await self._fetchall("PRAGMA foreign_key_list(stock_items)")
-        if not foreign_keys:
-            return
-        references_legacy_products = any(row["table"] == "products_legacy" for row in foreign_keys)
-        if not references_legacy_products:
+    async def _rebuild_orders_and_stock_items_if_legacy_foreign_keys(self) -> None:
+        stock_foreign_keys = await self._fetchall("PRAGMA foreign_key_list(stock_items)")
+        order_foreign_keys = await self._fetchall("PRAGMA foreign_key_list(orders)")
+        legacy_targets = {"products_legacy", "orders_legacy", "stock_items_legacy"}
+        needs_rebuild = any(row["table"] in legacy_targets for row in stock_foreign_keys) or any(
+            row["table"] in legacy_targets for row in order_foreign_keys
+        )
+        if not needs_rebuild:
             return
 
         await self.db.execute("PRAGMA foreign_keys=OFF")
+        await self.db.execute("ALTER TABLE orders RENAME TO orders_legacy")
         await self.db.execute("ALTER TABLE stock_items RENAME TO stock_items_legacy")
+        await self.db.execute(
+            """
+            CREATE TABLE orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                stock_item_id INTEGER,
+                amount_cents INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                payment_method TEXT NOT NULL,
+                payment_status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                completed_at TEXT,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (product_id) REFERENCES products(id),
+                FOREIGN KEY (stock_item_id) REFERENCES stock_items(id)
+            )
+            """
+        )
         await self.db.execute(
             """
             CREATE TABLE stock_items (
@@ -570,6 +593,18 @@ class ShopRepository:
         )
         await self.db.execute(
             """
+            INSERT INTO orders(
+                id, user_id, product_id, stock_item_id, amount_cents, status,
+                payment_method, payment_status, created_at, completed_at, payload_json
+            )
+            SELECT
+                id, user_id, product_id, stock_item_id, amount_cents, status,
+                payment_method, payment_status, created_at, completed_at, payload_json
+            FROM orders_legacy
+            """
+        )
+        await self.db.execute(
+            """
             INSERT INTO stock_items(
                 id, product_id, key_value, status, order_id, reserved_payment_id, reserved_until, created_at, sold_at
             )
@@ -578,7 +613,9 @@ class ShopRepository:
             FROM stock_items_legacy
             """
         )
+        await self.db.execute("DROP TABLE orders_legacy")
         await self.db.execute("DROP TABLE stock_items_legacy")
+        await self.db.execute("CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC)")
         await self.db.execute("CREATE INDEX IF NOT EXISTS idx_stock_product_status ON stock_items(product_id, status)")
         await self.db.execute("CREATE INDEX IF NOT EXISTS idx_stock_reserved_until ON stock_items(status, reserved_until)")
         await self.db.execute("PRAGMA foreign_keys=ON")
@@ -1422,20 +1459,58 @@ class ShopRepository:
 
     async def delete_admin_stock_item(self, product_id: int, stock_item_id: int) -> bool:
         await self.release_expired_reservations()
-        row = await self._fetchone(
-            "SELECT id, status FROM stock_items WHERE id = ? AND product_id = ?",
-            (stock_item_id, product_id),
-        )
-        if row is None:
-            return False
-        if row["status"] != "available":
-            raise ValueError("Можно удалить только доступный ключ, который еще не продан и не зарезервирован")
-        await self.db.execute(
-            "DELETE FROM stock_items WHERE id = ? AND product_id = ? AND status = 'available'",
-            (stock_item_id, product_id),
-        )
-        await self.db.commit()
-        return True
+        await self.db.execute("BEGIN IMMEDIATE")
+        try:
+            row = await self._fetchone(
+                "SELECT id, status, order_id FROM stock_items WHERE id = ? AND product_id = ?",
+                (stock_item_id, product_id),
+            )
+            if row is None:
+                await self.db.rollback()
+                return False
+            if row["status"] != "available":
+                raise ValueError("Можно удалить только доступный ключ, который еще не продан и не зарезервирован")
+            if row["order_id"] is not None:
+                raise ValueError("Нельзя удалить ключ, который уже связан с заказом")
+
+            order_ref = await self._fetchone(
+                "SELECT id FROM orders WHERE stock_item_id = ? LIMIT 1",
+                (stock_item_id,),
+            )
+            if order_ref is not None:
+                raise ValueError("Нельзя удалить ключ, который уже связан с заказом")
+
+            await self.db.execute(
+                """
+                UPDATE payments
+                SET reserved_stock_item_id = NULL,
+                    updated_at = COALESCE(?, updated_at, created_at)
+                WHERE reserved_stock_item_id = ?
+                  AND status IN ('failed', 'cancelled', 'expired', 'paid_unfulfilled')
+                """,
+                (utcnow_iso(), stock_item_id),
+            )
+            active_payment_ref = await self._fetchone(
+                """
+                SELECT id
+                FROM payments
+                WHERE reserved_stock_item_id = ?
+                LIMIT 1
+                """,
+                (stock_item_id,),
+            )
+            if active_payment_ref is not None:
+                raise ValueError("Нельзя удалить ключ, который связан с активной или завершенной оплатой")
+
+            await self.db.execute(
+                "DELETE FROM stock_items WHERE id = ? AND product_id = ? AND status = 'available'",
+                (stock_item_id, product_id),
+            )
+            await self.db.commit()
+            return True
+        except Exception:
+            await self.db.rollback()
+            raise
 
     async def get_available_stock_count(self, product_id: int) -> int:
         await self.release_expired_reservations()
@@ -1825,7 +1900,50 @@ class ShopRepository:
             )
             if release_reservation and payment["reserved_stock_item_id"]:
                 await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                await self._clear_payment_reservation_locked(payment_id)
             await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
+
+    async def cancel_product_payment_for_user(self, tg_user_id: int, payment_id: int) -> dict[str, Any] | None:
+        await self.db.execute("BEGIN IMMEDIATE")
+        try:
+            payment_row = await self._fetchone(
+                """
+                SELECT p.*
+                FROM payments p
+                JOIN users u ON u.id = p.user_id
+                WHERE p.id = ? AND u.tg_id = ?
+                """,
+                (payment_id, tg_user_id),
+            )
+            if payment_row is None:
+                await self.db.rollback()
+                return None
+            payment = dict(payment_row)
+            if payment.get("purpose") != "product_purchase":
+                raise ValueError("This payment cannot be cancelled")
+            if payment.get("status") == "cancelled":
+                await self.db.rollback()
+                return await self.get_user_payment_by_id(tg_user_id, payment_id)
+            if payment.get("status") != "pending":
+                raise ValueError("This payment cannot be cancelled")
+            await self.db.execute(
+                """
+                UPDATE payments
+                SET status = 'cancelled',
+                    provider_status = 'cancelled',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (utcnow_iso(), payment_id),
+            )
+            if payment.get("reserved_stock_item_id"):
+                await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment.get("provider_payment_id"))
+                await self._clear_payment_reservation_locked(payment_id)
+            await self.db.commit()
+            return await self.get_user_payment_by_id(tg_user_id, payment_id)
         except Exception:
             await self.db.rollback()
             raise
@@ -1864,6 +1982,10 @@ class ShopRepository:
                     order = await self.get_order(payment["user_id"], payment["order_id"])
                 await self.db.rollback()
                 return {"action": "already_completed", "payment": payment, "user": dict(user) if user else {}, "order": order}
+            if payment["status"] == "cancelled":
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                await self.db.rollback()
+                return {"action": "cancelled", "payment": payment, "user": dict(user) if user else {}, "order": None}
 
             expires_at_iso = parse_datetime_to_iso(invoice.get("expiration_date")) or payment.get("expires_at")
             await self.db.execute(
@@ -1920,7 +2042,9 @@ class ShopRepository:
                 )
                 if payment.get("reserved_stock_item_id"):
                     await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                    await self._clear_payment_reservation_locked(payment["id"])
                 payment["status"] = "expired"
+                payment["reserved_stock_item_id"] = None
                 user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
                 await self.db.commit()
                 return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
@@ -1966,6 +2090,10 @@ class ShopRepository:
                     order = await self.get_order(payment["user_id"], payment["order_id"])
                 await self.db.rollback()
                 return {"action": "already_completed", "payment": payment, "user": dict(user) if user else {}, "order": order}
+            if payment["status"] == "cancelled":
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                await self.db.rollback()
+                return {"action": "cancelled", "payment": payment, "user": dict(user) if user else {}, "order": None}
 
             status = self._heleket_status(invoice)
             expires_at_iso = epoch_to_iso(invoice.get("expired_at")) or payment.get("expires_at")
@@ -2017,7 +2145,9 @@ class ShopRepository:
                 )
                 if payment.get("reserved_stock_item_id"):
                     await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                    await self._clear_payment_reservation_locked(payment["id"])
                 payment["status"] = "expired"
+                payment["reserved_stock_item_id"] = None
                 user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
                 await self.db.commit()
                 return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
@@ -2061,6 +2191,10 @@ class ShopRepository:
                     order = await self.get_order(payment["user_id"], payment["order_id"])
                 await self.db.rollback()
                 return {"action": "already_completed", "payment": payment, "user": dict(user) if user else {}, "order": order}
+            if payment["status"] == "cancelled":
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                await self.db.rollback()
+                return {"action": "cancelled", "payment": payment, "user": dict(user) if user else {}, "order": None}
 
             expires_at_iso = epoch_to_iso(invoice.get("expires_at")) or payment.get("expires_at")
             await self.db.execute(
@@ -2113,7 +2247,9 @@ class ShopRepository:
                 )
                 if payment.get("reserved_stock_item_id"):
                     await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                    await self._clear_payment_reservation_locked(payment["id"])
                 payment["status"] = "expired"
+                payment["reserved_stock_item_id"] = None
                 user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
                 await self.db.commit()
                 return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
@@ -2150,6 +2286,10 @@ class ShopRepository:
                     order = await self.get_order(payment["user_id"], payment["order_id"])
                 await self.db.rollback()
                 return {"action": "already_completed", "payment": payment, "user": dict(user) if user else {}, "order": order}
+            if payment["status"] == "cancelled":
+                user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
+                await self.db.rollback()
+                return {"action": "cancelled", "payment": payment, "user": dict(user) if user else {}, "order": None}
 
             fallback_expires_at = utcnow() + timedelta(minutes=max(invoice_lifetime_minutes, 1))
             expires_at_iso = (
@@ -2208,7 +2348,9 @@ class ShopRepository:
                 )
                 if payment.get("reserved_stock_item_id"):
                     await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                    await self._clear_payment_reservation_locked(payment["id"])
                 payment["status"] = "expired"
+                payment["reserved_stock_item_id"] = None
                 user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
                 await self.db.commit()
                 return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
@@ -2242,7 +2384,9 @@ class ShopRepository:
             )
             if payment.get("reserved_stock_item_id"):
                 await self._release_reserved_stock_locked(int(payment["reserved_stock_item_id"]), payment["provider_payment_id"])
+                await self._clear_payment_reservation_locked(payment_id)
             payment["status"] = "expired"
+            payment["reserved_stock_item_id"] = None
             user = await self._fetchone("SELECT * FROM users WHERE id = ?", (payment["user_id"],))
             await self.db.commit()
             return {"action": "expired", "payment": payment, "user": dict(user) if user else {}, "order": None}
@@ -2431,6 +2575,17 @@ class ShopRepository:
             WHERE id = ? AND status = 'reserved'
             """,
             (stock_item_id,),
+        )
+
+    async def _clear_payment_reservation_locked(self, payment_id: int) -> None:
+        await self.db.execute(
+            """
+            UPDATE payments
+            SET reserved_stock_item_id = NULL,
+                updated_at = COALESCE(?, updated_at, created_at)
+            WHERE id = ?
+            """,
+            (utcnow_iso(), payment_id),
         )
 
     async def purchase_with_balance(self, user_id: int, product_id: int) -> dict[str, Any]:
