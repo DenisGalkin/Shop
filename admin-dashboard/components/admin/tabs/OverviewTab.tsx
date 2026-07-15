@@ -100,9 +100,9 @@ export default function OverviewTab() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Overview</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Overview</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Live store statistics</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neon/10 border border-neon/25 text-neon text-xs font-medium">
@@ -111,21 +111,21 @@ export default function OverviewTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 stagger">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 stagger">
         {kpis.map((kpi) => {
           const Icon = kpi.icon
           return (
-            <div key={kpi.label} className="rounded-2xl bg-card border border-border p-5 hover:border-white/15 transition-all duration-300 group">
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-10 h-10 rounded-xl ${kpi.bg} border ${kpi.border} flex items-center justify-center`}>
-                  <Icon className={`w-5 h-5 ${kpi.color}`} />
+            <div key={kpi.label} className="rounded-2xl bg-card border border-border p-4 sm:p-5 hover:border-white/15 transition-all duration-300 group">
+              <div className="flex items-start justify-between gap-2 flex-wrap mb-3 sm:mb-4">
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${kpi.bg} border ${kpi.border} flex items-center justify-center`}>
+                  <Icon className={`w-4.5 h-4.5 sm:w-5 sm:h-5 ${kpi.color}`} />
                 </div>
-                <span className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${kpi.up ? 'text-emerald-400 bg-emerald-400/10' : 'text-red-400 bg-red-400/10'}`}>
-                  {kpi.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                <span className={`flex items-center gap-1 text-[11px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full ${kpi.up ? 'text-emerald-400 bg-emerald-400/10' : 'text-red-400 bg-red-400/10'}`}>
+                  {kpi.up ? <TrendingUp className="w-3 h-3 shrink-0" /> : <TrendingDown className="w-3 h-3 shrink-0" />}
                   {kpi.change}
                 </span>
               </div>
-              <p className="text-2xl font-bold text-foreground tracking-tight">{kpi.value}</p>
+              <p className="text-xl sm:text-2xl font-bold text-foreground tracking-tight truncate">{kpi.value}</p>
               <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
             </div>
           )
@@ -133,7 +133,7 @@ export default function OverviewTab() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 rounded-2xl bg-card border border-border p-5">
+        <div className="xl:col-span-2 rounded-2xl bg-card border border-border p-4 sm:p-5">
           <div className="flex items-center justify-between mb-5">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Revenue &amp; orders</h3>
@@ -153,7 +153,7 @@ export default function OverviewTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-2xl bg-card border border-border p-5">
+        <div className="rounded-2xl bg-card border border-border p-4 sm:p-5">
           <div className="mb-4">
             <h3 className="text-sm font-semibold text-foreground">By category</h3>
             <p className="text-xs text-muted-foreground">Stock share</p>
@@ -180,7 +180,7 @@ export default function OverviewTab() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="rounded-2xl bg-card border border-border p-5">
+        <div className="rounded-2xl bg-card border border-border p-4 sm:p-5">
           <div className="mb-4">
             <h3 className="text-sm font-semibold text-foreground">Orders by day</h3>
             <p className="text-xs text-muted-foreground">Current week</p>
@@ -196,7 +196,7 @@ export default function OverviewTab() {
           </ResponsiveContainer>
         </div>
 
-        <div className="xl:col-span-2 rounded-2xl bg-card border border-border p-5">
+        <div className="xl:col-span-2 rounded-2xl bg-card border border-border p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-foreground">Recent orders</h3>
           </div>

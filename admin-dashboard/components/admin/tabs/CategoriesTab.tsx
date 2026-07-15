@@ -51,16 +51,16 @@ function CategoryModal({ category, onClose, onSave }: CategoryModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="w-full sm:max-w-md bg-card border border-border rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/50 overflow-hidden pb-safe">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-border">
           <h2 className="text-base font-semibold text-foreground">{isEdit ? 'Edit category' : 'Add category'}</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-5 sm:px-6 py-5 space-y-4">
           <div>
             <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
               Category name
@@ -100,7 +100,7 @@ function CategoryModal({ category, onClose, onSave }: CategoryModalProps) {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3">
+        <div className="px-5 sm:px-6 py-4 border-t border-border flex items-center justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
             Cancel
           </button>
@@ -146,6 +146,7 @@ function SortableCategoryRow({
       <div
         {...attributes}
         {...listeners}
+        style={{ touchAction: 'none' }}
         className="w-6 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground transition-colors"
       >
         <GripVertical className="w-4 h-4" />
@@ -177,7 +178,7 @@ function SortableCategoryRow({
       <span className="text-xs text-muted-foreground">#{category.sort_order + 1}</span>
 
       {/* Actions */}
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
         <button onClick={onEdit} title="Edit" className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
           <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
@@ -188,6 +189,67 @@ function SortableCategoryRow({
         </button>
         <button onClick={onDelete} title="Delete" className="w-7 h-7 rounded-lg hover:bg-red-500/10 flex items-center justify-center transition-colors">
           <Trash2 className="w-3.5 h-3.5 text-red-400" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Sortable card (mobile) ───────────────────────────────────────────────────
+function SortableCategoryCard({
+  category,
+  onEdit,
+  onToggle,
+  onDelete,
+}: {
+  category: Category
+  onEdit: () => void
+  onToggle: () => void
+  onDelete: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: category.id })
+  const style = { transform: CSS.Transform.toString(transform), transition }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'flex items-center gap-3 rounded-2xl bg-card border border-border p-3.5 transition-colors',
+        isDragging && 'opacity-50 bg-white/5',
+        !category.is_active && 'opacity-60',
+      )}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        style={{ touchAction: 'none' }}
+        className="w-9 h-9 -ml-1 shrink-0 flex items-center justify-center text-muted-foreground/40 active:text-muted-foreground transition-colors"
+      >
+        <GripVertical className="w-4.5 h-4.5" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-foreground truncate">{category.title}</span>
+          {!category.is_active && (
+            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-zinc-500/20 text-zinc-400">Hidden</span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground font-mono truncate">{category.slug} · #{category.sort_order + 1}</p>
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={onEdit} title="Edit" className="w-9 h-9 rounded-lg active:bg-white/10 flex items-center justify-center transition-colors">
+          <Edit2 className="w-4 h-4 text-muted-foreground" />
+        </button>
+        <button onClick={onToggle} title={category.is_active ? 'Hide' : 'Show'} className="w-9 h-9 rounded-lg active:bg-white/10 flex items-center justify-center transition-colors">
+          {category.is_active
+            ? <EyeOff className="w-4 h-4 text-muted-foreground" />
+            : <Eye className="w-4 h-4 text-emerald-400" />}
+        </button>
+        <button onClick={onDelete} title="Delete" className="w-9 h-9 rounded-lg active:bg-red-500/10 flex items-center justify-center transition-colors">
+          <Trash2 className="w-4 h-4 text-red-400" />
         </button>
       </div>
     </div>
@@ -288,8 +350,34 @@ export default function CategoriesTab() {
         <span>Drag rows to reorder categories. The order here determines the order shown to users in the bot.</span>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl bg-card border border-border overflow-x-auto">
+      {/* Mobile card list */}
+      <div className="md:hidden">
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {items.map((cat) => (
+                <SortableCategoryCard
+                  key={cat.id}
+                  category={cat}
+                  onEdit={() => setEditCategory(cat)}
+                  onToggle={() => toggleVisibility(cat.id)}
+                  onDelete={() => handleDelete(cat)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+
+        {items.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground rounded-2xl bg-card border border-border">
+            <Tag className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No categories yet</p>
+          </div>
+        )}
+      </div>
+
+      {/* Table — desktop */}
+      <div className="hidden md:block rounded-2xl bg-card border border-border overflow-x-auto">
         {/* Header */}
         <div className="min-w-[720px]">
           <div className={cn('grid gap-4 px-5 py-3 border-b border-border', CATEGORY_TABLE_COLUMNS)}>

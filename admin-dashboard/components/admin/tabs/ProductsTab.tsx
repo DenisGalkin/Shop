@@ -159,17 +159,17 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
   const catObj = categories.find((c) => c.id === form.category_id)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="w-full sm:max-w-2xl bg-card border border-border rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[94vh] sm:max-h-[90vh] pb-safe">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-border shrink-0">
           <h2 className="text-base font-semibold text-foreground">{isEdit ? 'Edit product' : 'Add product'}</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+        <div className="overflow-y-auto flex-1 px-5 sm:px-6 py-5 space-y-5">
           {/* Category + Price + Warranty row */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
@@ -289,13 +289,13 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
+        <div className="px-5 sm:px-6 py-4 border-t border-border flex items-center justify-end gap-3 shrink-0">
+          <button onClick={onClose} className="px-4 py-2.5 sm:py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-5 py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors"
+            className="px-5 py-2.5 sm:py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors"
           >
             {isEdit ? 'Save changes' : 'Add product'}
           </button>
@@ -383,9 +383,9 @@ function KeysModal({
   const soldCount = items.filter((item) => item.status === 'sold').length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-[1100px] bg-card border border-border rounded-[26px] shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[88vh]">
-        <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-border bg-linear-to-r from-white/[0.03] to-transparent">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="w-full sm:max-w-[1100px] bg-card border border-border rounded-t-3xl sm:rounded-[26px] shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[94vh] sm:max-h-[88vh] pb-safe">
+        <div className="flex items-start justify-between gap-4 px-4 sm:px-5 py-4 border-b border-border bg-linear-to-r from-white/[0.03] to-transparent">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground">Add keys</h2>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">{product.title}</p>
@@ -409,7 +409,7 @@ function KeysModal({
           </button>
         </div>
 
-        <div className="px-5 py-4 grid gap-4 lg:grid-cols-[1.3fr_0.8fr] overflow-y-auto">
+        <div className="px-4 sm:px-5 py-4 grid gap-4 lg:grid-cols-[1.3fr_0.8fr] overflow-y-auto">
           <div className="min-w-0">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -506,18 +506,18 @@ function KeysModal({
           </div>
         </div>
 
-        <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3 bg-black/10">
-          <span className="text-xs text-muted-foreground truncate">
+        <div className="px-4 sm:px-5 py-3 border-t border-border flex items-center justify-between gap-3 bg-black/10">
+          <span className="text-xs text-muted-foreground truncate hidden sm:inline">
             {pendingCount > 0 ? `${pendingCount} keys ready to upload` : 'Paste keys to prepare a new batch'}
           </span>
-          <div className="flex gap-3">
-            <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
+          <div className="flex gap-3 w-full sm:w-auto">
+            <button onClick={onClose} className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
               Cancel
             </button>
             <button
               onClick={handleUpload}
               disabled={busy}
-              className="px-5 py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex-1 sm:flex-none px-5 py-2.5 sm:py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy ? 'Uploading...' : 'Upload keys'}
             </button>
@@ -553,7 +553,7 @@ function SortableProductCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'group rounded-2xl bg-card border border-border p-5 transition-all duration-300 hover:border-white/15 hover:shadow-lg hover:shadow-black/20',
+        'group rounded-2xl bg-card border border-border p-4 sm:p-5 transition-all duration-300 hover:border-white/15 hover:shadow-lg hover:shadow-black/20',
         isDragging && 'opacity-50 scale-95 z-50',
         !product.is_active && 'opacity-60',
       )}
@@ -565,7 +565,8 @@ function SortableProductCard({
           <div
             {...attributes}
             {...listeners}
-            className="w-6 h-6 rounded flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+            style={{ touchAction: 'none' }}
+            className="w-8 h-8 sm:w-6 sm:h-6 -ml-1 sm:ml-0 rounded flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors"
           >
             <GripVertical className="w-4 h-4" />
           </div>
@@ -573,12 +574,12 @@ function SortableProductCard({
             {product.image}
           </div>
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 sm:gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           {/* Add keys */}
           <button
             onClick={onKeys}
             title="Add keys"
-            className="w-7 h-7 rounded-lg hover:bg-neon/10 flex items-center justify-center transition-colors"
+            className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg hover:bg-neon/10 active:bg-neon/10 flex items-center justify-center transition-colors"
           >
             <Key className="w-3.5 h-3.5 text-neon/70" />
           </button>
@@ -586,7 +587,7 @@ function SortableProductCard({
           <button
             onClick={onEdit}
             title="Edit"
-            className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors"
+            className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg hover:bg-white/10 active:bg-white/10 flex items-center justify-center transition-colors"
           >
             <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
@@ -594,7 +595,7 @@ function SortableProductCard({
           <button
             onClick={onToggleVisibility}
             title={product.is_active ? 'Hide' : 'Show'}
-            className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors"
+            className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg hover:bg-white/10 active:bg-white/10 flex items-center justify-center transition-colors"
           >
             {product.is_active
               ? <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
@@ -603,7 +604,7 @@ function SortableProductCard({
           <button
             onClick={onDelete}
             title="Delete"
-            className="w-7 h-7 rounded-lg hover:bg-red-500/10 flex items-center justify-center transition-colors"
+            className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg hover:bg-red-500/10 active:bg-red-500/10 flex items-center justify-center transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5 text-red-400" />
           </button>
@@ -787,7 +788,7 @@ export default function ProductsTab() {
       </div>
 
       {/* Category tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
         {catOptions.map((cat) => (
           <button
             key={cat.id}

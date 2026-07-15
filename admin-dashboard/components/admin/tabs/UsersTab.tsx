@@ -42,10 +42,10 @@ function UserModal({ user, onClose, onAdjustBalance }: { user: User; onClose: ()
   const status = statusConfig[user.status]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl shadow-black/50 overflow-hidden max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <div className="w-full sm:max-w-lg bg-card border border-border rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/50 overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col pb-safe">
         {/* Header */}
-        <div className="flex items-start justify-between px-6 py-4 border-b border-border shrink-0">
+        <div className="flex items-start justify-between px-5 sm:px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-neon/10 border border-neon/20 flex items-center justify-center text-sm font-bold text-neon">
               {user.avatar}
@@ -60,7 +60,7 @@ function UserModal({ user, onClose, onAdjustBalance }: { user: User; onClose: ()
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+        <div className="overflow-y-auto flex-1 px-5 sm:px-6 py-5 space-y-5">
           {/* Status + admin badge */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full', status.cls)}>{status.label}</span>
@@ -252,13 +252,13 @@ export default function UsersTab() {
             className="w-full bg-card border border-border rounded-xl pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 focus:border-neon/40 transition-all"
           />
         </div>
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap overflow-x-auto no-scrollbar">
           {(['all', 'active', 'new', 'inactive', 'admin'] as const).map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
               className={cn(
-                'px-3 py-2 rounded-xl text-xs font-medium transition-all',
+                'px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap shrink-0',
                 statusFilter === s
                   ? 'bg-neon/15 text-neon border border-neon/25'
                   : 'bg-card border border-border text-muted-foreground hover:text-foreground',
@@ -270,8 +270,78 @@ export default function UsersTab() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl bg-card border border-border overflow-x-auto">
+      {/* Sort control — mobile only (table has inline sort headers on desktop) */}
+      <div className="flex md:hidden items-center gap-2">
+        <span className="text-xs text-muted-foreground">Sort by</span>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          className="flex-1 appearance-none bg-card border border-border rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-neon/30"
+        >
+          <option value="total_spent_cents">Spent</option>
+          <option value="orders">Orders</option>
+          <option value="full_name">Name</option>
+          <option value="status">Status</option>
+          <option value="created_at">Registered</option>
+          <option value="id">ID</option>
+        </select>
+        <button
+          onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+          className="w-9 h-9 shrink-0 rounded-xl bg-card border border-border flex items-center justify-center text-muted-foreground"
+          title="Toggle sort direction"
+        >
+          {sortDir === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2">
+        {filtered.map((user) => {
+          const status = statusConfig[user.status]
+          return (
+            <button
+              key={user.id}
+              onClick={() => setSelectedUser(user)}
+              className="w-full text-left rounded-2xl bg-card border border-border p-4 active:bg-white/[0.03] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-neon/10 border border-neon/20 flex items-center justify-center text-xs font-bold text-neon shrink-0">
+                  {user.avatar}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground truncate flex items-center gap-1">
+                    {user.full_name}
+                    {user.is_admin && <Shield className="w-3 h-3 text-neon shrink-0" />}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {user.username ? `@${user.username}` : `ID ${user.id}`}
+                  </p>
+                </div>
+                <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0', status.cls)}>
+                  {status.label}
+                </span>
+              </div>
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-border text-xs">
+                <span className="text-muted-foreground">{user.orders} orders</span>
+                <span className="font-semibold text-neon">{fmt(user.total_spent_cents)}</span>
+                <span className="text-muted-foreground">
+                  {new Date(user.created_at).toLocaleDateString('en', { day: '2-digit', month: 'short', year: '2-digit' })}
+                </span>
+              </div>
+            </button>
+          )
+        })}
+
+        {filtered.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground rounded-2xl bg-card border border-border">
+            <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No users found</p>
+          </div>
+        )}
+      </div>
+
+      {/* Table — desktop */}
+      <div className="hidden md:block rounded-2xl bg-card border border-border overflow-x-auto">
         {/* Table header */}
         <div className="min-w-[700px] grid grid-cols-[60px_2fr_1fr_1fr_1fr_1fr_44px] gap-3 px-5 py-3 border-b border-border">
           {colHdr('ID', 'id')}

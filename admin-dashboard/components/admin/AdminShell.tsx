@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type React from 'react'
 import Sidebar, { type TabId } from './Sidebar'
 import Header from './Header'
+import MobileNav from './MobileNav'
 import OverviewTab from './tabs/OverviewTab'
 import ProductsTab from './tabs/ProductsTab'
 import CategoriesTab from './tabs/CategoriesTab'
@@ -34,7 +35,7 @@ function LoginScreen({ onReady }: { onReady: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6 pt-safe pb-safe">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-card border border-border p-6 shadow-2xl shadow-black/30">
         <div className="mb-6">
           <p className="text-2xl font-bold text-foreground">VEXND SHOP</p>
@@ -113,13 +114,16 @@ export default function AdminShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar active={activeTab} onChange={setActiveTab} />
+      <div className="hidden lg:flex">
+        <Sidebar active={activeTab} onChange={setActiveTab} />
+      </div>
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header activeTab={activeTab} onLogout={handleLogout} onChangeTab={setActiveTab} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 sm:p-6 lg:pb-6">
           {renderTab()}
         </main>
       </div>
+      <MobileNav active={activeTab} onChange={setActiveTab} onLogout={handleLogout} />
     </div>
   )
 }

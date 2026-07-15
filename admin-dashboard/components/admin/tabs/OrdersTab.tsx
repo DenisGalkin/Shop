@@ -162,7 +162,7 @@ export default function OrdersTab() {
             className="w-full bg-card border border-border rounded-xl pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 focus:border-neon/40 transition-all"
           />
         </div>
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-card border border-border overflow-x-auto">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-card border border-border overflow-x-auto no-scrollbar">
           {(['all', 'completed', 'pending', 'failed', 'refunded'] as const).map((s) => (
             <button
               key={s}
@@ -188,16 +188,16 @@ export default function OrdersTab() {
           return (
             <div key={order.id} className="rounded-2xl bg-card border border-border overflow-hidden transition-all duration-200 hover:border-white/12">
               <div
-                className="flex items-center gap-4 px-5 py-4 cursor-pointer"
+                className="flex items-center gap-3 sm:gap-4 px-4 py-3.5 sm:px-5 sm:py-4 cursor-pointer min-h-[44px]"
                 onClick={() => setExpanded(isExpanded ? null : order.id)}
               >
                 <div className={cn('w-2 h-2 rounded-full shrink-0', status.dot)} />
-                <span className="font-mono text-xs font-semibold text-muted-foreground w-16 shrink-0">
+                <span className="font-mono text-xs font-semibold text-muted-foreground w-12 sm:w-16 shrink-0">
                   #{order.id}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{order.product_name || 'Order'}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground truncate">
                     {order.username ? `@${order.username}` : order.user_name || `ID ${order.user_id}`} · {formatOrderDate(order.created_at)}
                   </p>
                 </div>
@@ -213,7 +213,16 @@ export default function OrdersTab() {
               </div>
 
               {isExpanded && (
-                <div className="px-5 pb-4 pt-0 border-t border-border animate-fade-in">
+                <div className="px-4 sm:px-5 pb-4 pt-0 border-t border-border animate-fade-in">
+                  <div className="flex items-center gap-2 mt-3 sm:hidden">
+                    <span className={cn('inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full border', status.cls)}>
+                      <StatusIcon className="w-3 h-3" />
+                      {status.label}
+                    </span>
+                    <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full', mCls)}>
+                      {order.payment_method || '—'}
+                    </span>
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3">
                     {[
                       { label: 'Order ID', value: `#${order.id}` },

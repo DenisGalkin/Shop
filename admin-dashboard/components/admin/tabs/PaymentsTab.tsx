@@ -188,7 +188,7 @@ export default function PaymentsTab() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 stagger">
         {(cryptoCards.length ? cryptoCards : [{ label: 'Payments', symbol: '$', amount: '$0.00', count: 0, cls: 'border-white/10 bg-white/5', accentCls: 'text-muted-foreground', key: 'empty' }]).map((card) => (
-          <div key={card.key} className={cn('rounded-2xl border p-5 transition-all hover:border-white/20', card.cls)}>
+          <div key={card.key} className={cn('rounded-2xl border p-4 sm:p-5 transition-all hover:border-white/20', card.cls)}>
             <div className="flex items-start justify-between mb-3">
               <div className={cn('text-2xl font-bold', card.accentCls)}>{card.symbol}</div>
               <span className="text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -202,7 +202,7 @@ export default function PaymentsTab() {
         ))}
       </div>
 
-      <div className="rounded-2xl bg-card border border-border p-5">
+      <div className="rounded-2xl bg-card border border-border p-4 sm:p-5">
         <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
           <div>
             <h3 className="text-sm font-semibold text-foreground">Daily inflow (USD)</h3>
@@ -248,7 +248,7 @@ export default function PaymentsTab() {
       </div>
 
       <div className="rounded-2xl bg-card border border-border overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-4 border-b border-border">
           <h3 className="text-sm font-semibold text-foreground">Transactions</h3>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -257,12 +257,77 @@ export default function PaymentsTab() {
               placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-surface-raised border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-neon/30 w-44"
+              className="w-full sm:w-44 bg-surface-raised border border-border rounded-lg pl-8 pr-3 py-2 sm:py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-neon/30"
             />
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile card list */}
+        <div className="sm:hidden divide-y divide-border">
+          {filtered.map((tx) => {
+            const status = statusConfig[tx.status]
+            const StatusIcon = status.icon
+            return (
+              <div key={tx.id} className="px-4 py-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-muted-foreground">#{tx.id}</span>
+                      <span className={cn('inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded-full text-[10px]', status.cls)}>
+                        <StatusIcon className="w-2.5 h-2.5" />{status.label}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-foreground truncate mt-1">
+                      {tx.user_name || `ID ${tx.user_id}`}
+                      {tx.username && <span className="text-muted-foreground font-normal"> · @{tx.username}</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{paymentPurpose(tx)}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-foreground">{fmt(tx.amount_cents)}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase mt-0.5">{tx.payment_type || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/60">
+                  <span className="text-[11px] text-muted-foreground">
+                    {tx.created_at ? new Date(tx.created_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {tx.provider_payment_id && (
+                      <button
+                        onClick={() => handleCopy(tx.provider_payment_id!, tx.id)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg active:bg-white/10 transition-colors"
+                      >
+                        <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[90px]">{tx.provider_payment_id}</span>
+                        <Copy className={cn('w-3 h-3 shrink-0', copied === tx.id ? 'text-neon' : 'text-muted-foreground')} />
+                      </button>
+                    )}
+                    {tx.provider_invoice_url && (
+                      <a
+                        href={tx.provider_invoice_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open payment ${tx.id} invoice`}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center active:bg-white/10 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {(filtered.length === 0 || loading) && (
+            <div className="text-center py-12 text-muted-foreground">
+              <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">{loading ? 'Loading payments...' : 'No transactions found'}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full min-w-[820px] text-xs">
             <thead>
               <tr className="border-b border-border">

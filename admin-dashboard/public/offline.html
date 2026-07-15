@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Offline — VEXND SHOP Admin</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0a0c14;
+      color: #f2f3f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    }
+    .wrap {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+    .badge {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: rgba(45, 212, 191, 0.1);
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    p { font-size: 14px; color: #9a9db0; max-width: 320px; line-height: 1.5; margin: 0 0 20px; }
+    button {
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      background: rgba(45, 212, 191, 0.12);
+      color: #2dd4bf;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 10px 20px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="badge">📡</div>
+    <h1>You're offline</h1>
+    <p>VEXND SHOP Admin needs a connection to load live store data. Reconnect and try again.</p>
+    <button onclick="location.reload()">Retry</button>
+  </div>
+</body>
+</html>
