@@ -29,6 +29,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import Modal from '../Modal'
 
 const CATEGORY_TABLE_COLUMNS = 'grid-cols-[32px_minmax(0,1.6fr)_minmax(180px,0.95fr)_72px_104px]'
 
@@ -51,8 +52,7 @@ function CategoryModal({ category, onClose, onSave }: CategoryModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full sm:max-w-md bg-card border border-border rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/50 overflow-hidden pb-safe">
+    <Modal onClose={onClose} className="sm:max-w-md">
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-border">
           <h2 className="text-base font-semibold text-foreground">{isEdit ? 'Edit category' : 'Add category'}</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors">
@@ -112,8 +112,7 @@ function CategoryModal({ category, onClose, onSave }: CategoryModalProps) {
             {isEdit ? 'Save changes' : 'Add category'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

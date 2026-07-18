@@ -38,6 +38,7 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import Modal from '../Modal'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`
@@ -159,8 +160,7 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
   const catObj = categories.find((c) => c.id === form.category_id)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full sm:max-w-2xl bg-card border border-border rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[94vh] sm:max-h-[90vh] pb-safe">
+    <Modal onClose={onClose} className="sm:max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-border shrink-0">
           <h2 className="text-base font-semibold text-foreground">{isEdit ? 'Edit product' : 'Add product'}</h2>
@@ -300,8 +300,7 @@ function ProductModal({ product, categories, onClose, onSave }: ProductModalProp
             {isEdit ? 'Save changes' : 'Add product'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -383,148 +382,123 @@ function KeysModal({
   const soldCount = items.filter((item) => item.status === 'sold').length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full sm:max-w-[1100px] bg-card border border-border rounded-t-3xl sm:rounded-[26px] shadow-2xl shadow-black/50 overflow-hidden flex flex-col max-h-[94vh] sm:max-h-[88vh] pb-safe">
-        <div className="flex items-start justify-between gap-4 px-4 sm:px-5 py-4 border-b border-border bg-linear-to-r from-white/[0.03] to-transparent">
+    <Modal onClose={onClose} className="sm:max-w-xl">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 px-5 sm:px-6 py-4 border-b border-border shrink-0">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground">Add keys</h2>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">{product.title}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="inline-flex items-center rounded-full border border-neon/20 bg-neon/10 px-2.5 py-1 text-[11px] font-medium text-neon">
-                {product.stock} in stock
-              </span>
-              <span className="inline-flex items-center rounded-full border border-border bg-surface-raised/70 px-2.5 py-1 text-[11px] text-foreground">
-                {items.length} total
-              </span>
-              <span className="inline-flex items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-300">
-                {reservedCount} reserved
-              </span>
-              <span className="inline-flex items-center rounded-full border border-zinc-400/20 bg-zinc-400/10 px-2.5 py-1 text-[11px] text-zinc-300">
-                {soldCount} sold
-              </span>
-            </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center transition-colors shrink-0">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="px-4 sm:px-5 py-4 grid gap-4 lg:grid-cols-[1.3fr_0.8fr] overflow-y-auto">
-          <div className="min-w-0">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Loaded keys</div>
-                <div className="text-xs text-muted-foreground mt-1">Compact view with fast delete for available keys.</div>
-              </div>
-              <span className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                {availableCount} available
-              </span>
+        <div className="overflow-y-auto flex-1 px-5 sm:px-6 py-5 space-y-5">
+          {/* Stats */}
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center rounded-full border border-neon/20 bg-neon/10 px-2.5 py-1 text-[11px] font-medium text-neon">
+              {product.stock} in stock
+            </span>
+            <span className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+              {availableCount} available
+            </span>
+            <span className="inline-flex items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-300">
+              {reservedCount} reserved
+            </span>
+            <span className="inline-flex items-center rounded-full border border-zinc-400/20 bg-zinc-400/10 px-2.5 py-1 text-[11px] text-zinc-300">
+              {soldCount} sold
+            </span>
+          </div>
+
+          {/* Add batch — primary action, up top */}
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Add new keys (one per line)
+              </label>
+              {pendingCount > 0 && (
+                <span className="text-[11px] text-neon font-medium">{pendingCount} ready</span>
+              )}
             </div>
-            <div className="space-y-2">
+            <textarea
+              rows={6}
+              value={keys}
+              onChange={(e) => setKeys(e.target.value)}
+              placeholder={'KEY-XXXX-XXXX-XXXX\nKEY-YYYY-YYYY-YYYY\n...'}
+              className="w-full bg-surface-raised border border-border rounded-xl px-3 py-2.5 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 resize-none"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">Duplicates are skipped automatically.</p>
+
+            {!!error && (
+              <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleUpload}
+              disabled={busy || !pendingCount}
+              className="mt-3 w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busy ? 'Uploading...' : 'Upload keys'}
+            </button>
+          </div>
+
+          {/* Existing keys */}
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Loaded keys
+              </label>
+              <span className="text-[11px] text-muted-foreground">{items.length} total</span>
+            </div>
+
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
               {loading ? (
-                <div className="rounded-2xl border border-border bg-surface-raised/40 px-4 py-8 text-sm text-muted-foreground">
+                <div className="rounded-xl border border-border bg-surface-raised/40 px-4 py-6 text-sm text-muted-foreground text-center">
                   Loading keys...
                 </div>
-              ) : error && !items.length ? (
-                <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-4 text-sm text-red-300">
-                  {error}
-                </div>
               ) : !items.length ? (
-                <div className="rounded-2xl border border-dashed border-border bg-surface-raised/20 px-4 py-8 text-sm text-muted-foreground">
-                  No keys yet. You can upload a new batch on the right.
+                <div className="rounded-xl border border-dashed border-border bg-surface-raised/20 px-4 py-6 text-sm text-muted-foreground text-center">
+                  No keys yet. Paste some above to add the first batch.
                 </div>
               ) : (
                 items.map((item) => {
                   const status = stockStatusMeta[item.status] || { label: item.status, badge: 'bg-zinc-400/10 text-zinc-300 border-zinc-400/20' }
                   const deleting = deletingId === item.id
                   return (
-                    <div key={item.id} className="group rounded-2xl border border-border bg-surface-raised/25 px-3 py-2.5 transition-colors hover:bg-surface-raised/45">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium shrink-0', status.badge)}>
-                              {status.label}
-                            </div>
-                            <div className="truncate font-mono text-[13px] text-foreground" title={item.key_value}>
-                              {maskKeyValue(item.key_value)}
-                            </div>
-                          </div>
-                          <div className="mt-1 truncate text-[11px] text-muted-foreground">{getStockMeta(item)}</div>
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-raised/25 px-3 py-2 transition-colors hover:bg-surface-raised/45">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium shrink-0', status.badge)}>
+                            {status.label}
+                          </span>
+                          <span className="truncate font-mono text-[12px] text-foreground" title={item.key_value}>
+                            {maskKeyValue(item.key_value)}
+                          </span>
                         </div>
-                        {item.can_delete ? (
-                          <button
-                            onClick={() => handleDelete(item)}
-                            disabled={deleting}
-                            className="shrink-0 rounded-lg border border-red-400/20 bg-red-400/8 px-2.5 py-1.5 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {deleting ? 'Deleting...' : 'Delete'}
-                          </button>
-                        ) : (
-                          <span className="shrink-0 text-[10px] text-muted-foreground">Locked</span>
-                        )}
+                        <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{getStockMeta(item)}</div>
                       </div>
+                      {item.can_delete ? (
+                        <button
+                          onClick={() => handleDelete(item)}
+                          disabled={deleting}
+                          className="shrink-0 rounded-lg border border-red-400/20 bg-red-400/8 px-2.5 py-1.5 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deleting ? '...' : 'Delete'}
+                        </button>
+                      ) : (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">Locked</span>
+                      )}
                     </div>
                   )
                 })
               )}
             </div>
           </div>
-
-          <div className="min-w-0">
-            <div className="rounded-[22px] border border-border bg-linear-to-b from-surface-raised/55 to-surface-raised/25 p-4">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide block">
-                    Add new batch
-                  </label>
-                  <p className="text-xs text-muted-foreground mt-1">One key per line. Duplicates are skipped automatically.</p>
-                </div>
-                <span className="inline-flex items-center rounded-full border border-border bg-card/70 px-2.5 py-1 text-[11px] text-foreground shrink-0">
-                  {pendingCount} ready
-                </span>
-              </div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                Keys (one per line)
-              </label>
-              <textarea
-                rows={10}
-                value={keys}
-                onChange={(e) => setKeys(e.target.value)}
-                placeholder={'KEY-XXXX-XXXX-XXXX\nKEY-YYYY-YYYY-YYYY\n...'}
-                className="w-full bg-card/80 border border-border rounded-2xl px-3 py-2.5 text-sm text-foreground font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-neon/30 resize-none"
-              />
-              <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground rounded-xl border border-amber-400/20 bg-amber-400/5 px-3 py-2.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                <span>Only available keys can be deleted. Reserved and sold keys stay protected.</span>
-              </div>
-              {!!error && items.length > 0 && (
-                <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
-                  {error}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
-
-        <div className="px-4 sm:px-5 py-3 border-t border-border flex items-center justify-between gap-3 bg-black/10">
-          <span className="text-xs text-muted-foreground truncate hidden sm:inline">
-            {pendingCount > 0 ? `${pendingCount} keys ready to upload` : 'Paste keys to prepare a new batch'}
-          </span>
-          <div className="flex gap-3 w-full sm:w-auto">
-            <button onClick={onClose} className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors">
-              Cancel
-            </button>
-            <button
-              onClick={handleUpload}
-              disabled={busy}
-              className="flex-1 sm:flex-none px-5 py-2.5 sm:py-2 rounded-xl bg-neon/15 border border-neon/30 text-neon text-sm font-medium hover:bg-neon/25 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy ? 'Uploading...' : 'Upload keys'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 

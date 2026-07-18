@@ -131,14 +131,14 @@ export default function Header({ activeTab, onLogout, onChangeTab }: HeaderProps
   const notifications = useMemo(() => (dashboard ? buildNotifications(dashboard) : []), [dashboard])
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5 bg-background/80 backdrop-blur-xl border-b border-border pt-safe">
-      <div className="flex items-center gap-2 min-w-0">
+    <header className="sticky top-0 z-20 flex items-center justify-between px-4 py-4 sm:px-8 sm:py-5 lg:px-10 bg-background/80 backdrop-blur-xl border-b border-border pt-safe min-h-[64px] sm:min-h-[76px]">
+      <div className="flex items-center gap-2.5 min-w-0">
         <span className="hidden sm:inline text-muted-foreground text-sm">VEXND SHOP</span>
         <span className="hidden sm:inline text-muted-foreground/40 text-sm">/</span>
-        <span className="text-base sm:text-sm font-semibold sm:font-medium text-foreground truncate">{tabTitles[activeTab]}</span>
+        <span className="text-lg sm:text-base font-semibold sm:font-medium text-foreground truncate">{tabTitles[activeTab]}</span>
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-muted-foreground">
           <Calendar className="w-3.5 h-3.5" />
           <span>{dateStr}</span>
@@ -166,7 +166,7 @@ export default function Header({ activeTab, onLogout, onChangeTab }: HeaderProps
                 className="fixed inset-0 z-40 sm:hidden"
                 onClick={() => setNotifOpen(false)}
               />
-              <div className="fixed left-4 right-4 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-11 sm:w-80 rounded-2xl bg-card border border-border shadow-2xl shadow-black/40 overflow-hidden z-50 animate-fade-in">
+              <div className="fixed left-4 right-4 top-20 sm:absolute sm:left-auto sm:right-0 sm:top-12 sm:w-80 rounded-2xl bg-card border border-border shadow-2xl shadow-black/40 overflow-hidden z-50 animate-fade-in">
                 <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                   <p className="text-sm font-semibold text-foreground">Notifications</p>
                   <span className="text-[10px] font-medium bg-neon/15 text-neon px-2 py-0.5 rounded-full">

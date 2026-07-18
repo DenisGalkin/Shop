@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { adjustUserBalance, getUsers, type User } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import Modal from '../Modal'
 
 const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
@@ -42,8 +43,7 @@ function UserModal({ user, onClose, onAdjustBalance }: { user: User; onClose: ()
   const status = statusConfig[user.status]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="w-full sm:max-w-lg bg-card border border-border rounded-t-3xl sm:rounded-2xl shadow-2xl shadow-black/50 overflow-hidden max-h-[92vh] sm:max-h-[90vh] flex flex-col pb-safe">
+    <Modal onClose={onClose} className="sm:max-w-lg">
         {/* Header */}
         <div className="flex items-start justify-between px-5 sm:px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
@@ -138,8 +138,7 @@ function UserModal({ user, onClose, onAdjustBalance }: { user: User; onClose: ()
           </div>
         </div>
 
-      </div>
-    </div>
+    </Modal>
   )
 }
 
